@@ -40,6 +40,13 @@ Usage:
   benchtop ftp add USER DIR            Add an FTP user (asks for a password)
   benchtop ftp passwd USER             Change an FTP password
   benchtop ftp rm USER                 Delete an FTP user
+  benchtop install SERVICE             Install a service with Homebrew (mysql-8.4, redis, ...)
+  benchtop db list SERVICE             List databases (mysql-8.4, postgres-17)
+  benchtop db create SERVICE NAME      Create a database
+  benchtop db user SERVICE USER [DB]   Create a user (asks for a password)
+  benchtop db root-password SERVICE    Tell Benchtop the root password
+  benchtop db env SERVICE              Print .env lines for Laravel
+  benchtop db shell SERVICE            Open the database client in the terminal
   benchtop hosts                       Write site domains to /etc/hosts
   benchtop trust                       Trust the local HTTPS certificate
   benchtop logs NAME [-n 100]          Show a log (run "benchtop logs" for names)
@@ -114,6 +121,17 @@ func run(args []string) error {
 		return nil
 	case "ftp":
 		return cmdFTP(m, rest)
+	case "install":
+		if len(rest) != 1 {
+			return errors.New("use: benchtop install SERVICE")
+		}
+		if err := m.Install(rest[0]); err != nil {
+			return err
+		}
+		fmt.Println("Installing in the background. Follow it with: benchtop logs brew")
+		return nil
+	case "db":
+		return cmdDB(m, rest)
 	case "hosts":
 		return m.SyncHosts()
 	case "trust":
@@ -363,4 +381,50 @@ func cmdUI(m *core.Manager, args []string) error {
 		return err
 	}
 	return nil
+}
+
+func cmdDB(m *core.Manager, args []string) error {
+	if len(args) < 2 {
+		return errors.New("use: benchtop db list|create|user|root-password|env|shell SERVICE")
+	}
+	sub, id := args[0], args[1]
+	switch sub {
+	case "list":
+		dbs, err := m.Databases(id)
+		for _, d := range dbs {
+			fmt.Println(d)
+		}
+		return err
+	case "create":
+		if len(args) != 3 {
+			return errors.New("use: benchtop db create SERVICE NAME")
+		}
+		return m.CreateDatabase(id, args[2])
+	case "user":
+		if len(args) < 3 || len(args) > 4 {
+			return errors.New("use: benchtop db user SERVICE USER [DATABASE]")
+		}
+		pw, err := readPassword("Password for the new user: ")
+		if err != nil {
+			return err
+		}
+		db := ""
+		if len(args) == 4 {
+			db = args[3]
+		}
+		return m.CreateDatabaseUser(id, args[2], pw, db)
+	case "root-password":
+		pw, err := readPassword("Root password: ")
+		if err != nil {
+			return err
+		}
+		return m.SetRootPassword(id, pw)
+	case "env":
+		env, err := m.ServiceEnv(id)
+		fmt.Print(env)
+		return err
+	case "shell":
+		return m.OpenShell(id)
+	}
+	return fmt.Errorf("unknown db command %q", sub)
 }

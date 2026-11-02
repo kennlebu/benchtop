@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.3.0 (unreleased)
+
+### Added
+
+- Databases page: MySQL (8.4, 8.0, newest), PostgreSQL (14 to 17) and Redis.
+  Create databases and users, copy `.env` lines, open a shell, edit the
+  config, change the port.
+- Mail page: Mailpit, with the inbox link and the `MAIL_*` lines.
+- "Install with Homebrew" for services that are not installed, with live
+  output in the "Homebrew installs" log.
+- "Use FlyEnv data" for MySQL and PostgreSQL: uses the FlyEnv data folder
+  where it is.
+- Root passwords for new databases go in the macOS Keychain, one for each
+  data folder.
+- `benchtop install` and `benchtop db list|create|user|root-password|env|shell`.
+- "Start all" and start at login start the databases and Mailpit that were
+  on last time.
+
+### Fixed
+
+- A second Benchtop home (for example a test copy with `BENCHTOP_HOME`)
+  now uses its own PHP and database sockets and its own `/etc/hosts` block.
+  Before, it could remove the sockets or the hosts entries of the main setup.
+- PHP-FPM does not start when another PHP-FPM already listens on its socket.
+
 ## v0.2.0 (unreleased)
 
 ### Changed

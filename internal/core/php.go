@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,8 +77,11 @@ func findPHP(key string) (PHPVersion, bool) {
 	return PHPVersion{}, false
 }
 
-func phpSocket(key string) string {
-	return "/tmp/benchtop-php" + strings.ReplaceAll(key, ".", "") + ".sock"
+// phpSocket is the socket of a PHP version. A Benchtop home other than the
+// default one gets its own names, so a test copy cannot take the sockets
+// of the main setup.
+func (m *Manager) phpSocket(key string) string {
+	return "/tmp/" + m.tmpName("benchtop-php"+strings.ReplaceAll(key, ".", "")) + ".sock"
 }
 
 func (m *Manager) phpDir(key string) string { return m.path("php", key) }
@@ -128,7 +132,7 @@ catch_workers_output = yes
 decorate_workers_output = no
 request_slowlog_timeout = 30
 slowlog = %[2]s/log/php-fpm-slow.log
-`, key, dir, phpSocket(key))
+`, key, dir, m.phpSocket(key))
 	return os.WriteFile(conf, []byte(content), 0o644)
 }
 
@@ -143,7 +147,12 @@ func (m *Manager) startPHP(key string) error {
 	if err := m.ensurePHPConfig(key); err != nil {
 		return err
 	}
-	os.Remove(phpSocket(key))
+	sock := m.phpSocket(key)
+	if conn, err := net.DialTimeout("unix", sock, 200*time.Millisecond); err == nil {
+		conn.Close()
+		return fmt.Errorf("PHP %s: another PHP-FPM already listens on %s", key, sock)
+	}
+	os.Remove(sock)
 	logPath := filepath.Join(m.phpDir(key), "log", "start.log")
 	if err := runDetached(logPath, v.FPM, "-y", m.PHPConfigPath(key), "-p", m.phpDir(key), "-D"); err != nil {
 		return fmt.Errorf("PHP %s: %w", key, err)

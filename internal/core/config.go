@@ -41,6 +41,8 @@ type LoginSettings struct {
 	Web     bool `json:"web"` // Caddy and the PHP versions that sites use
 	UI      bool `json:"ui"`
 	FTP     bool `json:"ftp"`
+	// Extras are the databases and other services that were on last time.
+	Extras bool `json:"extras"`
 }
 
 type Config struct {
@@ -55,6 +57,8 @@ type Config struct {
 	Editor   string `json:"editor,omitempty"`
 	Terminal string `json:"terminal,omitempty"`
 	Sites    []Site `json:"sites"`
+	// Services holds settings for databases and other extra services, by ID.
+	Services map[string]ServiceSettings `json:"services,omitempty"`
 }
 
 func defaultConfig() *Config {
@@ -64,8 +68,9 @@ func defaultConfig() *Config {
 		CaddyAdmin: "localhost:2099",
 		UIPort:     7788,
 		FTP:        FTPSettings{Enabled: true, Port: 21, PassivePortRange: "39000 40000"},
-		Login:      LoginSettings{Web: true, UI: true, FTP: true},
+		Login:      LoginSettings{Web: true, UI: true, FTP: true, Extras: true},
 		Sites:      []Site{},
+		Services:   map[string]ServiceSettings{},
 	}
 }
 
@@ -83,6 +88,9 @@ func loadConfig(path string) (*Config, error) {
 	}
 	if cfg.Sites == nil {
 		cfg.Sites = []Site{}
+	}
+	if cfg.Services == nil {
+		cfg.Services = map[string]ServiceSettings{}
 	}
 	return cfg, nil
 }

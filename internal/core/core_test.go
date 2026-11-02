@@ -1,6 +1,7 @@
 package core
 
 import (
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -156,5 +157,68 @@ func TestLoginAgent(t *testing.T) {
 	}
 	if exists(LoginPlistPath()) {
 		t.Fatal("plist was not removed")
+	}
+}
+
+func TestHideOldUninstalled(t *testing.T) {
+	in := []ServiceStatus{
+		{ID: "mysql-8.4", Installed: false}, {ID: "mysql-8.0", Installed: false},
+		{ID: "postgres-17"}, {ID: "postgres-16", Installed: true}, {ID: "postgres-15"},
+		{ID: "redis"},
+	}
+	var got []string
+	for _, s := range hideOldUninstalled(in) {
+		got = append(got, s.ID)
+	}
+	if strings.Join(got, ",") != "mysql-8.4,postgres-16,redis" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestSQLString(t *testing.T) {
+	if got := sqlString(`it's a \ test`); got != `'it\'s a \\ test'` {
+		t.Fatalf("got %s", got)
+	}
+}
+
+func TestServicePortSkipsUsedPort(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	used := ln.Addr().(*net.TCPAddr).Port
+	s := &fakeService{port: used}
+	port, err := m.servicePort(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port == used || m.serviceSettings("fake").Port != port {
+		t.Fatalf("want a free saved port, got %d (used %d)", port, used)
+	}
+}
+
+type fakeService struct {
+	extraService
+	port int
+}
+
+func (f *fakeService) ID() string       { return "fake" }
+func (f *fakeService) DefaultPort() int { return f.port }
+
+func TestTestHomeHasOwnSockets(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.phpSocket("8.2") == "/tmp/benchtop-php82.sock" {
+		t.Fatal("a second home must not use the main PHP socket")
+	}
+	if !strings.HasPrefix(m.phpSocket("8.2"), "/tmp/benchtop-php82-") {
+		t.Fatalf("unexpected socket %s", m.phpSocket("8.2"))
 	}
 }

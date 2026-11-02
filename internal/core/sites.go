@@ -198,8 +198,7 @@ type hostsBlock struct {
 }
 
 func (m *Manager) hostsBlock() hostsBlock {
-	userHome, _ := os.UserHomeDir()
-	if filepath.Clean(m.Home) == filepath.Join(userHome, ".benchtop") {
+	if filepath.Clean(m.Home) == defaultHomePath() {
 		return hostsBlock{begin: hostsBegin, end: hostsEnd, legacy: true}
 	}
 	return hostsBlock{

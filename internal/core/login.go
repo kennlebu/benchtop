@@ -162,6 +162,11 @@ func (m *Manager) StartAtLogin() error {
 			adminCmds = append(adminCmds, cmd)
 		}
 	}
+	if cfg.Login.Extras {
+		if err := m.startEnabledExtras(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if cfg.Login.FTP && cfg.FTP.Enabled {
 		if _, running := m.ftpRunning(); !running {
 			if cmd, err := m.ftpStartCmd(false); err != nil {

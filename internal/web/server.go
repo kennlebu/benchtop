@@ -59,6 +59,46 @@ func Handler(m *core.Manager) http.Handler {
 		return map[string]any{"warnings": notes}, err
 	}))
 
+	mux.HandleFunc("PUT /api/services/{id}/settings", s.wrap(func(r *http.Request) (any, error) {
+		var in core.ServiceSettingsUpdate
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return nil, err
+		}
+		return nil, s.m.UpdateServiceSettings(r.PathValue("id"), in)
+	}))
+	mux.HandleFunc("GET /api/services/{id}/env", s.wrap(func(r *http.Request) (any, error) {
+		env, err := s.m.ServiceEnv(r.PathValue("id"))
+		return map[string]any{"env": env}, err
+	}))
+	mux.HandleFunc("GET /api/db/{id}/databases", s.wrap(func(r *http.Request) (any, error) {
+		dbs, err := s.m.Databases(r.PathValue("id"))
+		return map[string]any{"databases": dbs}, err
+	}))
+	mux.HandleFunc("POST /api/db/{id}/databases", s.wrap(func(r *http.Request) (any, error) {
+		var in struct{ Name string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return nil, err
+		}
+		return nil, s.m.CreateDatabase(r.PathValue("id"), in.Name)
+	}))
+	mux.HandleFunc("POST /api/db/{id}/users", s.wrap(func(r *http.Request) (any, error) {
+		var in struct{ User, Password, Database string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return nil, err
+		}
+		return nil, s.m.CreateDatabaseUser(r.PathValue("id"), in.User, in.Password, in.Database)
+	}))
+	mux.HandleFunc("POST /api/db/{id}/root-password", s.wrap(func(r *http.Request) (any, error) {
+		var in struct{ Password string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			return nil, err
+		}
+		return nil, s.m.SetRootPassword(r.PathValue("id"), in.Password)
+	}))
+	mux.HandleFunc("POST /api/db/{id}/shell", s.wrap(func(r *http.Request) (any, error) {
+		return nil, s.m.OpenShell(r.PathValue("id"))
+	}))
+
 	mux.HandleFunc("POST /api/sites", s.wrap(s.saveSite))
 	mux.HandleFunc("POST /api/suggest-site", s.wrap(func(r *http.Request) (any, error) {
 		var in struct{ Path string }
@@ -323,6 +363,8 @@ func (s *server) service(w http.ResponseWriter, r *http.Request) {
 		err = s.m.Stop(id)
 	case "restart":
 		err = s.m.Restart(id, force)
+	case "install":
+		err = s.m.Install(id)
 	default:
 		err = errors.New("unknown action " + action)
 	}

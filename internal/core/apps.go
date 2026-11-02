@@ -141,5 +141,8 @@ func (m *Manager) serviceFiles(id string) []ConfigFile {
 	case id == "ftp":
 		return []ConfigFile{{Label: "pure-ftpd.conf", Path: m.ftpConf(), Note: "Benchtop makes this file on each FTP start."}}
 	}
+	if s, ok := findExtra(id); ok && s.Installed() {
+		return s.files(m)
+	}
 	return nil
 }

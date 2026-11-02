@@ -153,6 +153,8 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
   <nav>
     <a href="#sites" data-view="sites">Sites <span class="count" id="nSites"></span></a>
     <a href="#services" data-view="services">Services <span class="count" id="nServices"></span></a>
+    <a href="#databases" data-view="databases">Databases <span class="count" id="nDB"></span></a>
+    <a href="#mail" data-view="mail">Mail <span class="count" id="nMail"></span></a>
     <a href="#ftp" data-view="ftp">FTP <span class="count" id="nFTP"></span></a>
     <a href="#logs" data-view="logs">Logs</a>
     <a href="#settings" data-view="settings">Settings</a>
@@ -166,6 +168,17 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
     <section class="view" id="view-services">
       <div class="view-head"><h1>Services</h1></div>
       <div class="grid" id="services"></div>
+    </section>
+
+    <section class="view" id="view-databases">
+      <div class="view-head"><h1>Databases</h1></div>
+      <div class="grid" id="databases"></div>
+    </section>
+
+    <section class="view" id="view-mail">
+      <div class="view-head"><h1>Mail</h1></div>
+      <p class="note" style="margin:-6px 0 14px">Mailpit catches the mail that your apps send, so no real mail leaves your Mac.</p>
+      <div id="mail"></div>
     </section>
 
     <section class="view" id="view-ftp">
@@ -193,6 +206,7 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
         <div class="checks" id="loginChecks">
           <label class="check"><input type="checkbox" id="loginWeb" onchange="saveSettings()"> Caddy and the PHP versions that your sites use</label>
           <label class="check"><input type="checkbox" id="loginUI" onchange="saveSettings()"> This dashboard</label>
+          <label class="check"><input type="checkbox" id="loginExtras" onchange="saveSettings()"> Databases and Mailpit that were on last time</label>
           <label class="check"><input type="checkbox" id="loginFTP" onchange="saveSettings()"> FTP <small>(asks for your password at login)</small></label>
         </div>
       </div>
@@ -272,6 +286,15 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
   </form>
 </dialog>
 
+<dialog id="askDlg">
+  <form method="dialog" onsubmit="return submitAsk(event)">
+    <h3 id="askTitle"></h3>
+    <div id="askNote" class="note"></div>
+    <div id="askFields"></div>
+    <div class="foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary" id="askSubmit">OK</button></div>
+  </form>
+</dialog>
+
 <dialog id="reportDlg">
   <div class="body">
     <h3>Import report</h3>
@@ -342,17 +365,28 @@ function connect() {
 
 function render(s) {
   state = s;
-  const svcs = s.services.filter(x => x.installed && (x.kind !== 'php' || x.running || (x.usedBy || []).length));
+  const svcs = s.services.filter(x => x.installed && (
+    x.kind === 'php' ? x.running || (x.usedBy || []).length :
+    isExtra(x) ? x.running || x.enabled : true));
   const up = svcs.filter(x => x.running).length;
   $('#allDot').className = 'dot ' + (up === 0 ? '' : up === svcs.length ? 'ok' : 'warn');
   $('#allText').textContent = up === 0 ? 'All stopped' : up === svcs.length ? `All ${up} running` : `${up} of ${svcs.length} running`;
   $('#nSites').textContent = s.sites.length;
-  $('#nServices').textContent = `${s.services.filter(x => x.running).length}/${s.services.length}`;
+  const web = s.services.filter(x => !isExtra(x));
+  $('#nServices').textContent = `${web.filter(x => x.running).length}/${web.length}`;
+  const dbs = s.services.filter(x => x.kind === 'database' && x.installed);
+  $('#nDB').textContent = dbs.length ? `${dbs.filter(x => x.running).length}/${dbs.length}` : '';
+  const mail = s.services.find(x => x.kind === 'mail');
+  $('#nMail').textContent = mail && mail.running ? 'on' : '';
   $('#nFTP').textContent = s.ftpUsers.length;
   if (!document.querySelector('dialog[open]')) { renderSites(); renderFTP(); }
   renderServices();
+  renderDatabases();
+  renderMail();
   renderSettings();
 }
+
+const isExtra = (x) => x.kind === 'database' || x.kind === 'mail';
 
 // ---------- Sites ----------
 function siteDot(entry) {
@@ -483,7 +517,7 @@ function deleteSite(id) {
 
 // ---------- Services ----------
 function renderServices() {
-  $('#services').innerHTML = state.services.map(s => `
+  $('#services').innerHTML = state.services.filter(s => !isExtra(s)).map(s => `
     <div class="card">
       <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
       <div class="meta">${esc(s.running ? 'Running' : s.installed ? 'Stopped' : 'Not installed')}${s.admin ? ' · needs your password' : ''}<br>${esc(s.detail)}${s.usedBy && s.usedBy.length ? `<br>Used by ${esc(s.usedBy.join(', '))}` : ''}</div>
@@ -515,6 +549,175 @@ function startService(id, force) {
 
 function svc(btn, id, action) {
   return busy(btn, () => action === 'start' ? startService(id) : api('POST', `/api/services/${id}/${action}`));
+}
+
+// ---------- Databases and mail ----------
+const dbCache = {};
+const isDB = (s) => s.id.startsWith('mysql-') || s.id.startsWith('postgres-');
+
+async function loadDatabases(id, force) {
+  const c = dbCache[id];
+  if (!force && c && (c.loading || Date.now() - c.at < 15000)) return;
+  dbCache[id] = {...(c || {}), loading: true};
+  try {
+    const r = await api('GET', `/api/db/${id}/databases`);
+    dbCache[id] = {list: r.databases, at: Date.now()};
+  } catch (e) { dbCache[id] = {error: e.message, at: Date.now()}; }
+  renderDatabases();
+}
+
+function extraActions(s) {
+  if (s.installing) return `<span class="note" style="margin:0">Installing…</span><button class="btn small" onclick="go('logs','brew')">View output</button>`;
+  if (!s.installed) return `<button class="btn small primary" onclick="install(this,'${s.id}')">Install with Homebrew</button>`;
+  const main = s.running
+    ? `<button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
+    : `<button class="btn small primary" onclick="svc(this,'${s.id}','start')">Start</button>`;
+  const extra = (s.links || []).map(l => `<a class="btn small" href="${esc(l.url)}" target="_blank">${esc(l.label)}</a>`).join('');
+  const newDB = isDB(s) && s.running ? `<button class="btn small" onclick="newDatabase('${s.id}')">New database</button>` : '';
+  return main + extra + newDB + `<button class="btn small" onclick="copyEnv(this,'${s.id}')">Copy .env</button>`;
+}
+
+function extraMeta(s) {
+  if (!s.installed) return `Not installed. Homebrew formula: ${esc(s.formula)}`;
+  let html = `${s.running ? 'Running' : 'Stopped'}<br>${esc(s.detail).replace(' · data ', '<br>Data: ').replace(' · ', '<br>')}`;
+  if (s.dataSource === 'flyenv') html += ' <span class="badge">FlyEnv data</span>';
+  if (isDB(s) && s.running) {
+    const c = dbCache[s.id];
+    if (!c || c.loading && !c.list) html += '<br>Databases: loading…';
+    else if (c.error) html += `<br><span class="danger-text">${esc(c.error)}</span>`;
+    else html += '<br>Databases: ' + (c.list.length ? esc(c.list.join(', ')) : 'none yet');
+  }
+  return html;
+}
+
+function renderDatabases() {
+  const list = state.services.filter(x => x.kind === 'database');
+  for (const s of list) if (isDB(s) && s.running && currentView() === 'databases') loadDatabases(s.id);
+  $('#databases').innerHTML = list.map(s => `
+    <div class="card">
+      <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
+      <div class="meta">${extraMeta(s)}</div>
+      <div class="actions" style="flex-wrap:wrap">${extraActions(s)}<span class="spacer"></span>
+        ${s.installed ? `<button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="extraMenu(event,'${s.id}')">${ICONS.more}</button>` : ''}</div>
+    </div>`).join('');
+}
+
+let mailEnv = null;
+function renderMail() {
+  const s = state.services.find(x => x.kind === 'mail');
+  if (!s) { $('#mail').innerHTML = ''; return; }
+  if (s.installed && mailEnv === null) { mailEnv = ''; api('GET', `/api/services/${s.id}/env`).then(r => { mailEnv = r.env; renderMail(); }).catch(() => {}); }
+  $('#mail').innerHTML = `<div class="card" style="max-width:560px">
+    <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
+    <div class="meta">${extraMeta(s)}</div>
+    ${s.installed && mailEnv ? `<p class="note" style="margin:0 0 6px">Put these lines in the .env file of your Laravel app:</p><pre class="log" style="height:auto;min-height:0;margin-bottom:12px">${esc(mailEnv)}</pre>` : ''}
+    <div class="actions" style="flex-wrap:wrap">${extraActions(s)}<span class="spacer"></span>
+      ${s.installed ? `<button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="extraMenu(event,'${s.id}')">${ICONS.more}</button>` : ''}</div>
+  </div>`;
+}
+
+function extraMenu(ev, id) {
+  const s = state.services.find(x => x.id === id);
+  const items = [];
+  if (isDB(s)) {
+    items.push(['New user', () => newDBUser(id)]);
+    items.push(['Set root password', () => rootPassword(id)]);
+  }
+  if (isDB(s) || id === 'redis') items.push([id === 'redis' ? 'Open redis-cli' : 'Open shell', () => busy(null, () => api('POST', `/api/db/${id}/shell`))]);
+  if (items.length) items.push(null);
+  for (const f of s.files || []) items.push(['Edit ' + f.label, () => { openPath('editor', f.path); if (f.note) toast(f.note); }]);
+  items.push(['Change port', () => changePort(id)]);
+  if (s.flyenvData && s.dataSource !== 'flyenv') items.push(['Use FlyEnv data', () => useFlyEnv(id, true)]);
+  if (s.dataSource === 'flyenv') items.push(['Use Benchtop data folder', () => useFlyEnv(id, false)]);
+  items.push(null, ['Log', () => go('logs', id)]);
+  showMenu(ev.currentTarget, items);
+}
+
+function install(btn, id) {
+  busy(btn, async () => { await api('POST', `/api/services/${id}/install`); toast('Installing with Homebrew. This can take some minutes.', '', [['View output', () => go('logs', 'brew')]]); });
+}
+
+async function copyEnv(btn, id) {
+  busy(btn, async () => {
+    const r = await api('GET', `/api/services/${id}/env`);
+    await navigator.clipboard.writeText(r.env);
+    toast('Copied the .env lines. Paste them in your app.');
+  });
+}
+
+// ask shows a small form and resolves with the values, or null.
+let askResolve = null;
+function ask(title, fields, {note = '', submit = 'OK'} = {}) {
+  $('#askTitle').textContent = title;
+  $('#askNote').textContent = note;
+  $('#askSubmit').textContent = submit;
+  $('#askFields').innerHTML = fields.map((f, i) => `
+    <label class="field" for="ask${i}">${esc(f.label)}</label>
+    ${f.options
+      ? `<select id="ask${i}" name="${f.name}">${f.options.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}</select>`
+      : `<input id="ask${i}" name="${f.name}" type="${f.type || 'text'}" value="${esc(f.value || '')}" ${f.required === false ? '' : 'required'} ${f.pattern ? `pattern="${f.pattern}"` : ''} autocomplete="off">`}
+    ${f.hint ? `<div class="note">${esc(f.hint)}</div>` : ''}`).join('');
+  $('#askDlg').showModal();
+  return new Promise(res => {
+    askResolve = res;
+    $('#askDlg').addEventListener('close', () => { if (askResolve) { askResolve(null); askResolve = null; } }, {once: true});
+  });
+}
+function submitAsk(ev) {
+  ev.preventDefault();
+  const values = Object.fromEntries(new FormData(ev.target));
+  const res = askResolve; askResolve = null;
+  $('#askDlg').close();
+  res(values);
+  return false;
+}
+
+async function newDatabase(id) {
+  const v = await ask('New database', [{name: 'name', label: 'Name', pattern: '[A-Za-z0-9_]+', hint: 'Letters, numbers and underscores.'}], {submit: 'Create'});
+  if (!v) return;
+  busy(null, async () => { await api('POST', `/api/db/${id}/databases`, {name: v.name}); toast('Created database ' + v.name); loadDatabases(id, true); });
+}
+
+async function newDBUser(id) {
+  const c = dbCache[id];
+  const dbs = (c && c.list) || [];
+  const v = await ask('New user', [
+    {name: 'user', label: 'User name', pattern: '[A-Za-z0-9_]+'},
+    {name: 'password', label: 'Password', type: 'password'},
+    {name: 'database', label: 'Full access to', options: [{value: '', label: 'No database'}, ...dbs.map(d => ({value: d, label: d}))]},
+  ], {submit: 'Create'});
+  if (!v) return;
+  busy(null, async () => { await api('POST', `/api/db/${id}/users`, v); toast('Created user ' + v.user); });
+}
+
+async function rootPassword(id) {
+  const s = state.services.find(x => x.id === id);
+  const v = await ask('Set root password', [{name: 'password', label: 'Root password', type: 'password'}],
+    {note: `Type the root password of this ${s.name} data folder. Benchtop checks it and keeps it in your Keychain.`, submit: 'Save'});
+  if (!v) return;
+  busy(null, async () => { await api('POST', `/api/db/${id}/root-password`, v); toast('Saved the root password'); loadDatabases(id, true); });
+}
+
+async function changePort(id) {
+  const s = state.services.find(x => x.id === id);
+  const port = (s.detail.match(/port (\d+)/) || [])[1] || '';
+  const v = await ask('Change port', [{name: 'port', label: 'Port', type: 'number', value: port}], {note: `Restart ${s.name} to use the new port.`, submit: 'Save'});
+  if (!v) return;
+  busy(null, async () => { await api('PUT', `/api/services/${id}/settings`, {port: +v.port}); toast('Port saved. Restart ' + s.name + ' to use it.'); });
+}
+
+function useFlyEnv(id, on) {
+  const s = state.services.find(x => x.id === id);
+  const msg = on
+    ? `Use the FlyEnv data folder where it is?\n\n${s.flyenvData}\n\nBenchtop does not copy it. Do not run this database in FlyEnv at the same time.`
+    : 'Use the Benchtop data folder again? The FlyEnv data stays where it is.';
+  if (!confirm(msg)) return;
+  busy(null, async () => {
+    if (s.running) await api('POST', `/api/services/${id}/stop`);
+    await api('PUT', `/api/services/${id}/settings`, on ? {dataDir: s.flyenvData, source: 'flyenv'} : {dataDir: '', source: ''});
+    delete dbCache[id];
+    toast(on ? 'Now uses the FlyEnv data. Start it, then set the root password.' : 'Now uses the Benchtop data folder.');
+  });
 }
 
 // ---------- FTP ----------
@@ -566,7 +769,9 @@ async function loadLogList(select) {
   const sel = $('#logSelect');
   const label = (n) => {
     if (n.startsWith('site-')) { const e = state && state.sites.find(x => x.site.id === n.slice(5)); return (e ? e.site.domains[0] : n.slice(5)) + ' (access)'; }
-    return {caddy: 'Caddy', 'caddy-run': 'Caddy start output', ftp: 'FTP transfers', login: 'Start at login', dashboard: 'Dashboard'}[n] || n.replace('php-', 'PHP-FPM ');
+    const svc = state && state.services.find(x => x.id === n);
+    if (svc && isExtra(svc)) return svc.name;
+    return {caddy: 'Caddy', 'caddy-run': 'Caddy start output', ftp: 'FTP transfers', login: 'Start at login', dashboard: 'Dashboard', brew: 'Homebrew installs'}[n] || n.replace('php-', 'PHP-FPM ');
   };
   sel.innerHTML = r.logs.map(n => `<option value="${esc(n)}">${esc(label(n))}</option>`).join('');
   const pick = select || currentLog || 'caddy';
@@ -620,6 +825,7 @@ function renderSettings() {
   $('#loginWeb').checked = s.login.web;
   $('#loginUI').checked = s.login.ui;
   $('#loginFTP').checked = s.login.ftp;
+  $('#loginExtras').checked = s.login.extras;
   $('#loginChecks').classList.toggle('disabled', !s.login.enabled);
   $('#loginChecks').querySelectorAll('input').forEach(i => i.disabled = !s.login.enabled);
   const fill = (sel, list, value) => {
@@ -639,7 +845,7 @@ function renderSettings() {
 function saveSettings(ev) {
   if (ev) ev.preventDefault();
   const body = {
-    login: {enabled: $('#loginOn').checked, web: $('#loginWeb').checked, ui: $('#loginUI').checked, ftp: $('#loginFTP').checked},
+    login: {enabled: $('#loginOn').checked, web: $('#loginWeb').checked, ui: $('#loginUI').checked, ftp: $('#loginFTP').checked, extras: $('#loginExtras').checked},
     editor: $('#editor').value, terminal: $('#terminal').value,
     httpPort: +$('#httpPort').value, httpsPort: +$('#httpsPort').value, ftpPort: +$('#ftpPort').value,
   };
@@ -698,14 +904,17 @@ function go(view, log) {
   if (location.hash !== '#' + view) location.hash = view; else route();
 }
 
+const currentView = () => (location.hash || '#sites').slice(1);
+
 function route() {
   const view = (location.hash || '#sites').slice(1);
-  const known = ['sites', 'services', 'ftp', 'logs', 'settings'];
+  const known = ['sites', 'services', 'databases', 'mail', 'ftp', 'logs', 'settings'];
   const v = known.includes(view) ? view : 'sites';
   document.querySelectorAll('.view').forEach(el => el.classList.toggle('active', el.id === 'view-' + v));
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
   closeMenu();
   if (v === 'logs') loadLogList(currentLog); else closeLog();
+  if (v === 'databases' && state) { for (const id in dbCache) delete dbCache[id]; renderDatabases(); }
 }
 addEventListener('hashchange', route);
 

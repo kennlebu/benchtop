@@ -25,6 +25,11 @@ func DefaultHome() string {
 	if h := os.Getenv("BENCHTOP_HOME"); h != "" {
 		return h
 	}
+	return defaultHomePath()
+}
+
+// defaultHomePath is ~/.benchtop, whatever BENCHTOP_HOME says.
+func defaultHomePath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".benchtop")
 }
@@ -54,12 +59,21 @@ func (m *Manager) path(p ...string) string {
 	return filepath.Join(append([]string{m.Home}, p...)...)
 }
 
+func copyServices(in map[string]ServiceSettings) map[string]ServiceSettings {
+	out := make(map[string]ServiceSettings, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
 // Config returns a copy of the current config.
 func (m *Manager) Config() Config {
 	m.cfgMu.Lock()
 	defer m.cfgMu.Unlock()
 	c := *m.cfg
 	c.Sites = append([]Site(nil), m.cfg.Sites...)
+	c.Services = copyServices(m.cfg.Services)
 	return c
 }
 
@@ -68,6 +82,7 @@ func (m *Manager) updateConfig(fn func(c *Config) error) error {
 	defer m.cfgMu.Unlock()
 	next := *m.cfg
 	next.Sites = append([]Site(nil), m.cfg.Sites...)
+	next.Services = copyServices(m.cfg.Services)
 	if err := fn(&next); err != nil {
 		return err
 	}
@@ -90,6 +105,13 @@ type ServiceStatus struct {
 	UsedBy    []string     `json:"usedBy,omitempty"`
 	Admin     bool         `json:"admin"`
 	Files     []ConfigFile `json:"files,omitempty"`
+	// These fields are for extra services (databases and mail).
+	Enabled    bool   `json:"enabled,omitempty"`
+	Formula    string `json:"formula,omitempty"`
+	Installing bool   `json:"installing,omitempty"`
+	DataSource string `json:"dataSource,omitempty"`
+	Links      []Link `json:"links,omitempty"`
+	FlyEnvData string `json:"flyenvData,omitempty"`
 }
 
 func (m *Manager) Status() []ServiceStatus {
@@ -115,7 +137,7 @@ func (m *Manager) Status() []ServiceStatus {
 		pid, running := m.phpRunning(v.Key)
 		out = append(out, ServiceStatus{
 			ID: "php-" + v.Key, Name: "PHP-FPM " + v.Key, Kind: "php", Version: v.Full,
-			Installed: true, Running: running, PID: pid, Detail: phpSocket(v.Key), UsedBy: used[v.Key],
+			Installed: true, Running: running, PID: pid, Detail: m.phpSocket(v.Key), UsedBy: used[v.Key],
 		})
 	}
 	var missing []string
@@ -135,6 +157,7 @@ func (m *Manager) Status() []ServiceStatus {
 		ID: "ftp", Name: "Pure-FTPd", Kind: "ftp", Installed: m.pureFTPdBin() != "", Running: running, PID: pid, Admin: true,
 		Detail: fmt.Sprintf("port %d, %d users", cfg.FTP.Port, len(users)),
 	})
+	out = append(out, m.extraStatus()...)
 	for i := range out {
 		for _, f := range m.serviceFiles(out[i].ID) {
 			if exists(f.Path) {
@@ -163,6 +186,9 @@ func (m *Manager) start(id string, force bool) error {
 	case id == "ftp":
 		return m.startFTP(force)
 	}
+	if s, ok := findExtra(id); ok {
+		return m.startExtra(s, force)
+	}
 	return fmt.Errorf("unknown service %q", id)
 }
 
@@ -186,6 +212,9 @@ func (m *Manager) stop(id string) error {
 		return m.stopPHP(strings.TrimPrefix(id, "php-"))
 	case id == "ftp":
 		return m.stopFTP()
+	}
+	if s, ok := findExtra(id); ok {
+		return m.stopExtra(s, true)
 	}
 	return fmt.Errorf("unknown service %q", id)
 }
@@ -211,6 +240,7 @@ func (m *Manager) StartAll() error {
 	if err := m.startCaddy(false); err != nil {
 		errs = append(errs, fmt.Errorf("caddy: %w", err))
 	}
+	errs = append(errs, m.startEnabledExtras())
 
 	var adminCmds []string
 	hostsCmd, err := m.hostsSyncCmd()
@@ -244,6 +274,9 @@ func (m *Manager) StopAll() error {
 	for _, v := range DiscoverPHP() {
 		errs = append(errs, m.stopPHP(v.Key))
 	}
+	for _, s := range extraServices() {
+		errs = append(errs, m.stopExtra(s, false))
+	}
 	if _, running := m.ftpRunning(); running {
 		errs = append(errs, m.stopFTP())
 	}
@@ -258,6 +291,12 @@ func (m *Manager) LogFiles() map[string]string {
 		"ftp":       m.path("logs", "ftp-transfer.log"),
 		"login":     m.path("logs", "login.log"),
 		"dashboard": m.path("logs", "ui.log"),
+		"brew":      m.path("logs", "brew.log"),
+	}
+	for _, s := range extraServices() {
+		if s.Installed() {
+			files[s.ID()] = m.extraLog(s.ID())
+		}
 	}
 	for _, v := range DiscoverPHP() {
 		files["php-"+v.Key] = filepath.Join(m.phpDir(v.Key), "log", "php-fpm.log")
@@ -328,4 +367,15 @@ func migrateLegacyHome(home string) error {
 		}
 	}
 	return nil
+}
+
+// startEnabledExtras starts the extra services that the user started last time.
+func (m *Manager) startEnabledExtras() error {
+	var errs []error
+	for _, s := range extraServices() {
+		if m.serviceSettings(s.ID()).Enabled && s.Installed() {
+			errs = append(errs, m.startExtra(s, false))
+		}
+	}
+	return errors.Join(errs...)
 }

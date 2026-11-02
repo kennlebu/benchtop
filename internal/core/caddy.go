@@ -81,7 +81,7 @@ func (m *Manager) renderCaddyfile(cfg Config) string {
 		fmt.Fprintf(&b, "\troot * %q\n", s.Root)
 		b.WriteString("\tencode zstd gzip\n")
 		if s.PHP != "" {
-			fmt.Fprintf(&b, "\tphp_fastcgi unix/%s\n", phpSocket(s.PHP))
+			fmt.Fprintf(&b, "\tphp_fastcgi unix/%s\n", m.phpSocket(s.PHP))
 		}
 		b.WriteString("\tfile_server\n")
 		if extra := strings.TrimSpace(s.Extra); extra != "" {
