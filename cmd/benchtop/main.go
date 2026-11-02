@@ -1,0 +1,366 @@
+// Command benchtop manages a local Caddy + PHP-FPM + Pure-FTPd setup on macOS.
+package main
+
+import (
+	"bufio"
+	"errors"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"os/signal"
+	"sort"
+	"strings"
+	"syscall"
+	"text/tabwriter"
+	"time"
+
+	"github.com/kennlebu/benchtop/internal/core"
+	"github.com/kennlebu/benchtop/internal/web"
+)
+
+const usage = `Benchtop: local Caddy, PHP-FPM and Pure-FTPd manager.
+
+Usage:
+  benchtop ui [--port N] [--no-open]   Open the web dashboard
+  benchtop ui --background             Run the dashboard after the terminal closes
+  benchtop ui --stop                   Stop the background dashboard
+  benchtop status                      Show services
+  benchtop start [SERVICE] [--force]   Start all, or caddy | php | php-8.2 | ftp
+  benchtop start --login               Start what the "start at login" setting names
+  benchtop stop [SERVICE]              Stop all, or one service
+  benchtop restart SERVICE [--force]   Restart one service
+  benchtop sites                       List sites
+  benchtop site add DOMAINS ROOT [--php 8.2] [--https]
+  benchtop site rm ID|DOMAIN           Delete a site
+  benchtop php                         List installed PHP versions
+  benchtop ftp users                   List FTP users
+  benchtop ftp add USER DIR            Add an FTP user (asks for a password)
+  benchtop ftp passwd USER             Change an FTP password
+  benchtop ftp rm USER                 Delete an FTP user
+  benchtop hosts                       Write site domains to /etc/hosts
+  benchtop trust                       Trust the local HTTPS certificate
+  benchtop logs NAME [-n 100]          Show a log (run "benchtop logs" for names)
+  benchtop import-flyenv               Import sites and FTP users from FlyEnv
+
+--force stops another program that holds the port (for example FlyEnv).
+Data folder: ~/.benchtop (set BENCHTOP_HOME to change it).
+Turn on "start at login" on the dashboard settings page.
+`
+
+func main() {
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		fmt.Print(usage)
+		return nil
+	}
+	m, err := core.New(core.DefaultHome())
+	if err != nil {
+		return err
+	}
+	cmd, rest := args[0], args[1:]
+	switch cmd {
+	case "ui":
+		return cmdUI(m, rest)
+	case "status":
+		printStatus(m)
+		return nil
+	case "start", "stop", "restart":
+		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+		force := fs.Bool("force", false, "stop another program that holds the port")
+		login := fs.Bool("login", false, "start what the login settings name")
+		fs.Parse(reorder(rest))
+		svc := fs.Arg(0)
+		switch {
+		case cmd == "start" && *login:
+			fmt.Println(time.Now().Format(time.RFC3339), "start at login")
+			err = m.StartAtLogin()
+		case cmd == "start" && (svc == "" || svc == "all"):
+			err = m.StartAll()
+		case cmd == "stop" && (svc == "" || svc == "all"):
+			err = m.StopAll()
+		case svc == "":
+			return errors.New("name a service: caddy, php, php-8.2, ftp")
+		case cmd == "start":
+			err = m.Start(svc, *force)
+		case cmd == "stop":
+			err = m.Stop(svc)
+		default:
+			err = m.Restart(svc, *force)
+		}
+		printStatus(m)
+		var pe *core.PortInUseError
+		if errors.As(err, &pe) {
+			err = fmt.Errorf("%w\nRun again with --force to stop it", err)
+		}
+		return err
+	case "sites":
+		printSites(m)
+		return nil
+	case "site":
+		return cmdSite(m, rest)
+	case "php":
+		for _, v := range core.DiscoverPHP() {
+			fmt.Printf("%-5s %-9s %s\n", v.Key, v.Full, v.FPM)
+		}
+		return nil
+	case "ftp":
+		return cmdFTP(m, rest)
+	case "hosts":
+		return m.SyncHosts()
+	case "trust":
+		return m.TrustCA()
+	case "logs":
+		return cmdLogs(m, rest)
+	case "import-flyenv":
+		report, err := m.ImportFlyEnv(core.FlyEnvHome())
+		for _, line := range report {
+			fmt.Println(line)
+		}
+		return err
+	}
+	return fmt.Errorf("unknown command %q. Run benchtop help", cmd)
+}
+
+// reorder puts flags before positional arguments, so "start ftp --force" works.
+func reorder(args []string) []string {
+	var flags, pos []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") {
+			flags = append(flags, a)
+			if !strings.Contains(a, "=") && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && valueFlag(a) {
+				flags = append(flags, args[i+1])
+				i++
+			}
+			continue
+		}
+		pos = append(pos, a)
+	}
+	return append(flags, pos...)
+}
+
+func valueFlag(f string) bool {
+	switch strings.TrimLeft(f, "-") {
+	case "php", "port", "n", "extra":
+		return true
+	}
+	return false
+}
+
+func printStatus(m *core.Manager) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "SERVICE\tVERSION\tSTATE\tDETAIL")
+	for _, s := range m.Status() {
+		state := "stopped"
+		if s.Running {
+			state = fmt.Sprintf("running (pid %d)", s.PID)
+		} else if !s.Installed {
+			state = "not installed"
+		}
+		detail := s.Detail
+		if len(s.UsedBy) > 0 {
+			detail += "; used by " + strings.Join(s.UsedBy, ", ")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.ID, s.Version, state, detail)
+	}
+	w.Flush()
+}
+
+func printSites(m *core.Manager) {
+	sites := m.Config().Sites
+	if len(sites) == 0 {
+		fmt.Println("No sites. Add one with: benchtop site add myapp.test ~/Projects/myapp/public --php 8.3")
+		return
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ID\tURL\tPHP\tROOT")
+	for _, s := range sites {
+		php := s.PHP
+		if php == "" {
+			php = "static"
+		}
+		url := core.SiteURL(s)
+		if len(s.Domains) > 1 {
+			url += fmt.Sprintf(" (+%d)", len(s.Domains)-1)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.ID, url, php, s.Root)
+	}
+	w.Flush()
+}
+
+func cmdSite(m *core.Manager, args []string) error {
+	if len(args) == 0 {
+		return errors.New("use: benchtop site add|rm")
+	}
+	switch args[0] {
+	case "add":
+		fs := flag.NewFlagSet("site add", flag.ExitOnError)
+		php := fs.String("php", "", "PHP version, for example 8.2 (empty for static)")
+		https := fs.Bool("https", false, "serve with HTTPS")
+		fs.Parse(reorder(args[1:]))
+		if fs.NArg() != 2 {
+			return errors.New("use: benchtop site add DOMAINS ROOT [--php 8.2] [--https]")
+		}
+		root := fs.Arg(1)
+		if !strings.HasPrefix(root, "/") && !strings.HasPrefix(root, "~/") {
+			wd, _ := os.Getwd()
+			root = wd + "/" + root
+		}
+		s, warnings, err := m.SaveSite(core.Site{Domains: []string{fs.Arg(0)}, Root: root, PHP: *php, HTTPS: *https})
+		if err != nil {
+			return err
+		}
+		for _, w := range warnings {
+			fmt.Println("warning:", w)
+		}
+		fmt.Printf("Added %s -> %s\n", core.SiteURL(s), s.Root)
+		return nil
+	case "rm", "delete":
+		if len(args) != 2 {
+			return errors.New("use: benchtop site rm ID|DOMAIN")
+		}
+		warnings, err := m.DeleteSite(args[1])
+		for _, w := range warnings {
+			fmt.Println("warning:", w)
+		}
+		return err
+	}
+	return fmt.Errorf("unknown site command %q", args[0])
+}
+
+func readPassword(prompt string) (string, error) {
+	fmt.Print(prompt)
+	// Hide the typed text when stdin is a terminal.
+	stty := func(arg string) error {
+		c := exec.Command("/bin/stty", arg)
+		c.Stdin = os.Stdin
+		return c.Run()
+	}
+	if stty("-echo") == nil {
+		defer func() { stty("echo"); fmt.Println() }()
+	}
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	return strings.TrimRight(line, "\r\n"), err
+}
+
+func cmdFTP(m *core.Manager, args []string) error {
+	if len(args) == 0 || args[0] == "users" {
+		users, err := m.FTPUsers()
+		if err != nil {
+			return err
+		}
+		for _, u := range users {
+			fmt.Printf("%-16s %s\n", u.User, u.Dir)
+		}
+		return nil
+	}
+	switch args[0] {
+	case "add":
+		if len(args) != 3 {
+			return errors.New("use: benchtop ftp add USER DIR")
+		}
+		pw, err := readPassword("Password: ")
+		if err != nil {
+			return err
+		}
+		return m.AddFTPUser(args[1], pw, args[2])
+	case "passwd":
+		if len(args) != 2 {
+			return errors.New("use: benchtop ftp passwd USER")
+		}
+		pw, err := readPassword("New password: ")
+		if err != nil {
+			return err
+		}
+		return m.SetFTPPassword(args[1], pw)
+	case "rm", "delete":
+		if len(args) != 2 {
+			return errors.New("use: benchtop ftp rm USER")
+		}
+		return m.DeleteFTPUser(args[1])
+	}
+	return fmt.Errorf("unknown ftp command %q", args[0])
+}
+
+func cmdLogs(m *core.Manager, args []string) error {
+	fs := flag.NewFlagSet("logs", flag.ExitOnError)
+	n := fs.Int("n", 100, "number of lines")
+	fs.Parse(reorder(args))
+	if fs.NArg() == 0 {
+		files := m.LogFiles()
+		names := make([]string, 0, len(files))
+		for name := range files {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			fmt.Printf("%-24s %s\n", name, files[name])
+		}
+		return nil
+	}
+	text, err := m.TailLog(fs.Arg(0), *n)
+	if err != nil {
+		return err
+	}
+	fmt.Println(text)
+	return nil
+}
+
+func cmdUI(m *core.Manager, args []string) error {
+	fs := flag.NewFlagSet("ui", flag.ExitOnError)
+	port := fs.Int("port", m.Config().UIPort, "port for the dashboard")
+	noOpen := fs.Bool("no-open", false, "do not open the browser")
+	background := fs.Bool("background", false, "run the dashboard in the background")
+	stop := fs.Bool("stop", false, "stop the background dashboard")
+	fs.Parse(args)
+
+	if *stop {
+		return m.StopUIBackground()
+	}
+	if *background {
+		url, err := m.StartUIBackground()
+		if err != nil {
+			return err
+		}
+		fmt.Println("Benchtop dashboard:", url)
+		if !*noOpen {
+			exec.Command("/usr/bin/open", url).Run()
+		}
+		return nil
+	}
+
+	addr := fmt.Sprintf("127.0.0.1:%d", *port)
+	url := "http://" + addr
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		// The dashboard may already run, for example from a login item.
+		if !*noOpen {
+			exec.Command("/usr/bin/open", url).Run()
+		}
+		return fmt.Errorf("cannot listen on %s (is the dashboard already running?): %w", addr, err)
+	}
+	srv := &http.Server{Handler: web.Handler(m), ReadHeaderTimeout: 10 * time.Second}
+	fmt.Printf("Benchtop dashboard: %s\nPress Ctrl-C to quit. Services keep running.\n", url)
+	if !*noOpen {
+		go exec.Command("/usr/bin/open", url).Run()
+	}
+	go func() {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+		<-ch
+		srv.Close()
+	}()
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
