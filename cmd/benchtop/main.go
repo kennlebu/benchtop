@@ -43,7 +43,8 @@ Usage:
   benchtop versions                    List installed PHP versions
   benchtop php [ARGS]                  Run the PHP of the site in this folder
   benchtop composer [ARGS]             Run Composer with that PHP
-  benchtop which                       Show which PHP "benchtop php" uses here
+  benchtop node|npm|npx [ARGS]         Run Node with the version from .nvmrc or package.json
+  benchtop which                       Show which PHP and Node these commands use here
   benchtop ext list VERSION            List PECL extensions (for example: ext list 8.2)
   benchtop ext install VERSION NAME    Install an extension with PECL (xdebug, redis, ...)
   benchtop ext on|off VERSION NAME     Turn an installed extension on or off
@@ -96,7 +97,8 @@ func run(args []string) error {
 		fs.Parse(rest)
 		return core.ServeDNS(*port, strings.Split(*tld, ","))
 	}
-	if cmd == "php" || cmd == "composer" {
+	switch cmd {
+	case "php", "composer", "node", "npm", "npx":
 		runTool(m, cmd, rest) // does not return
 	}
 	switch cmd {
@@ -177,6 +179,13 @@ func run(args []string) error {
 			return err
 		}
 		fmt.Printf("PHP %s (%s): %s\n", v.Full, reason, filepath.Join(filepath.Dir(filepath.Dir(v.FPM)), "bin", "php"))
+		if n, reason, err := core.NodeForDir(wd); err != nil {
+			fmt.Println("Node:", err)
+		} else if n.Version == "" {
+			fmt.Printf("Node (%s): %s\n", reason, filepath.Join(n.Bin, "node"))
+		} else {
+			fmt.Printf("Node %s (%s, %s): %s\n", n.Version, n.From, reason, filepath.Join(n.Bin, "node"))
+		}
 		return nil
 	case "ext":
 		return cmdExt(m, rest)
@@ -554,11 +563,18 @@ func cmdDB(m *core.Manager, args []string) error {
 	return fmt.Errorf("unknown db command %q", sub)
 }
 
-// runTool runs PHP or Composer with the PHP version of the current folder,
-// and exits with its exit code. Arguments pass through as they are.
+// runTool runs PHP, Composer or a Node tool with the version of the
+// current folder, and exits with its exit code. Arguments pass through as
+// they are.
 func runTool(m *core.Manager, tool string, args []string) {
 	wd, _ := os.Getwd()
-	c, err := m.PHPCommand(wd, tool, args)
+	var c *exec.Cmd
+	var err error
+	if tool == "php" || tool == "composer" {
+		c, err = m.PHPCommand(wd, tool, args)
+	} else {
+		c, err = core.NodeCommand(wd, tool, args)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

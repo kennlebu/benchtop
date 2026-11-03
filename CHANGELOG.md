@@ -30,6 +30,11 @@
 - `.php-version`: Benchtop reads it before `composer.json`, for new
   sites, parked sites, and `benchtop php`, `composer` and `which`. A site
   that uses another version gets a hint with a "Use PHP X" button.
+- Node for each project: `benchtop node`, `npm` and `npx` use the version
+  from `.nvmrc` or `.node-version` (also `lts/*` and names such as
+  `lts/iron`), then `engines.node` in `package.json`, then the `node` on
+  your PATH. Benchtop finds Node from nvm, fnm and Homebrew. `benchtop
+  which` shows the choice.
 - A site hint when a domain is not in `/etc/hosts`, with a "Sync
   /etc/hosts" button. A new parked folder never opens a password dialog
   by itself.
