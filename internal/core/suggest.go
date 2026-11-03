@@ -84,11 +84,35 @@ type composerJSON struct {
 	} `json:"config"`
 }
 
+// phpVersionFile reads the PHP version from .php-version in the project,
+// for example "8.2", "8.2.10" or "php-8.2". It returns "" when there is none.
+func phpVersionFile(project string) string {
+	data, err := os.ReadFile(filepath.Join(project, ".php-version"))
+	if err != nil {
+		return ""
+	}
+	text := strings.TrimSpace(string(data))
+	text = strings.TrimPrefix(strings.TrimPrefix(text, "php-"), "php@")
+	if v, ok := parseVersion(text); ok && v[0] > 0 {
+		return fmt.Sprintf("%d.%d", v[0], v[1])
+	}
+	return ""
+}
+
 func suggestPHP(project, root string, installed []PHPVersion) (string, string) {
 	if len(installed) == 0 {
 		return "", "No PHP version is installed."
 	}
 	newest := installed[len(installed)-1].Key
+	// .php-version is the clearest choice, so it comes first.
+	if key := phpVersionFile(project); key != "" {
+		for _, iv := range installed {
+			if iv.Key == key {
+				return key, "From .php-version in the project."
+			}
+		}
+		return key, fmt.Sprintf(".php-version asks for PHP %s, which is not installed.", key)
+	}
 	data, err := os.ReadFile(filepath.Join(project, "composer.json"))
 	if err != nil {
 		if matches, _ := filepath.Glob(filepath.Join(root, "*.php")); len(matches) > 0 {

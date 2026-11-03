@@ -39,7 +39,7 @@ func (m *Manager) PHPForDir(dir string) (PHPVersion, string, error) {
 		return PHPVersion{}, "", fmt.Errorf("site %s uses PHP %s, which is not installed", best.Domains[0], best.PHP)
 	}
 	for d := dir; ; d = filepath.Dir(d) {
-		if exists(filepath.Join(d, "composer.json")) {
+		if exists(filepath.Join(d, ".php-version")) || exists(filepath.Join(d, "composer.json")) {
 			key, note := suggestPHP(d, d, installed)
 			if v, ok := findPHP(key); ok {
 				return v, note, nil

@@ -11,7 +11,8 @@ import (
 type SiteFix struct {
 	Label string `json:"label"`
 	// Action is "set-root" (Value is the new root), "start" (Value is a
-	// service ID) or "hosts" (sync /etc/hosts).
+	// service ID), "set-php" (Value is a PHP version) or "hosts" (sync
+	// /etc/hosts).
 	Action string `json:"action"`
 	Value  string `json:"value"`
 }
@@ -84,6 +85,17 @@ func (m *Manager) SiteHealth(s Site, running map[string]bool) []SiteHint {
 			hints = append(hints, SiteHint{Level: "error", Message: "Nginx is stopped, so this site gives a 502 error.",
 				Fix: &SiteFix{Label: "Start Nginx", Action: "start", Value: "nginx"}})
 		}
+	}
+	project := s.Root
+	if filepath.Base(project) == "public" {
+		project = filepath.Dir(project)
+	}
+	if want := phpVersionFile(project); want != "" && s.PHP != "" && want != s.PHP {
+		hint := SiteHint{Level: "warn", Message: fmt.Sprintf(".php-version asks for PHP %s, but this site uses PHP %s.", want, s.PHP)}
+		if _, ok := findPHP(want); ok {
+			hint.Fix = &SiteFix{Label: "Use PHP " + want, Action: "set-php", Value: want}
+		}
+		hints = append(hints, hint)
 	}
 	if s.PHP != "" {
 		id := "php-" + s.PHP

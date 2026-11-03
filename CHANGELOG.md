@@ -27,6 +27,9 @@
 - Subdomains: a site option (Advanced, or `--subdomains`) that sends
   `*.domain` to the site too, in Caddy and in Nginx. Parked sites have it
   on. Subdomains need the wildcard DNS; a site hint offers to turn it on.
+- `.php-version`: Benchtop reads it before `composer.json`, for new
+  sites, parked sites, and `benchtop php`, `composer` and `which`. A site
+  that uses another version gets a hint with a "Use PHP X" button.
 - A site hint when a domain is not in `/etc/hosts`, with a "Sync
   /etc/hosts" button. A new parked folder never opens a password dialog
   by itself.

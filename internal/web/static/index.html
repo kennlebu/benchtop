@@ -500,6 +500,9 @@ function applyFix(btn, id, i) {
       toast('Root is now ' + r.site.root); warnings(r.warnings);
     } else if (fix.action === 'start') {
       await startService(fix.value);
+    } else if (fix.action === 'set-php') {
+      const r = await api('POST', '/api/sites', {...e.site, php: fix.value});
+      toast(`${r.site.domains[0]} now uses PHP ${r.site.php}`); warnings(r.warnings);
     } else if (fix.action === 'hosts') {
       await api('POST', '/api/hosts/sync');
       toast('/etc/hosts is up to date');

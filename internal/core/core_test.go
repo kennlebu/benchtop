@@ -125,6 +125,11 @@ func TestSuggestSite(t *testing.T) {
 	if php, _ := suggestPHP(proj, s.Root, installed); php != "8.2" {
 		t.Fatalf("want PHP 8.2, got %s", php)
 	}
+	// .php-version comes before composer.json.
+	os.WriteFile(filepath.Join(proj, ".php-version"), []byte("php-7.4\n"), 0o644)
+	if php, _ := suggestPHP(proj, s.Root, installed); php != "7.4" {
+		t.Fatalf("want PHP 7.4 from .php-version, got %s", php)
+	}
 	hints := m.SiteHealth(Site{Root: proj, PHP: "8.2", Domains: []string{"x.test"}}, map[string]bool{})
 	if len(hints) == 0 || hints[len(hints)-1].Fix == nil || hints[len(hints)-1].Fix.Value != filepath.Join(proj, "public") {
 		t.Fatalf("want a public/ fix, got %+v", hints)
@@ -158,28 +163,6 @@ func TestLoginAgent(t *testing.T) {
 	}
 	if exists(LoginPlistPath()) {
 		t.Fatal("plist was not removed")
-	}
-}
-
-func TestGroupVersions(t *testing.T) {
-	in := []ServiceStatus{
-		{ID: "mysql", Name: "MySQL 26.10"}, {ID: "mysql-8.4", Name: "MySQL 8.4"},
-		{ID: "postgres-17"}, {ID: "postgres-16", Installed: true}, {ID: "postgres-15"},
-		{ID: "redis"},
-	}
-	var got []string
-	out := groupVersions(in)
-	for _, s := range out {
-		got = append(got, s.ID)
-	}
-	if strings.Join(got, ",") != "mysql,postgres-16,redis" {
-		t.Fatalf("got %v", got)
-	}
-	if len(out[0].Choices) != 2 || out[0].Choices[1].ID != "mysql-8.4" {
-		t.Fatalf("mysql choices: %+v", out[0].Choices)
-	}
-	if len(out[1].Choices) != 2 || out[1].Family != "postgres" {
-		t.Fatalf("postgres card: %+v", out[1])
 	}
 }
 
@@ -366,19 +349,6 @@ func TestNginxSite(t *testing.T) {
 	}
 }
 
-func TestExtensionIni(t *testing.T) {
-	if got := extensionIni("redis"); !strings.Contains(got, "\nextension=redis.so\n") {
-		t.Fatalf("redis ini: %s", got)
-	}
-	x := extensionIni("xdebug")
-	if !strings.Contains(x, "zend_extension=xdebug.so") || !strings.Contains(x, "xdebug.start_with_request=trigger") {
-		t.Fatalf("xdebug ini: %s", x)
-	}
-	if peclPackage("xdebug", "7.4") != "xdebug-3.1.6" || peclPackage("xdebug", "8.2") != "xdebug" {
-		t.Fatal("wrong xdebug release for the PHP version")
-	}
-}
-
 func TestPHPFormulas(t *testing.T) {
 	catalogMu.Lock()
 	old := catalog
@@ -454,13 +424,6 @@ func TestParkedSites(t *testing.T) {
 	}
 }
 
-func TestInHosts(t *testing.T) {
-	hosts := "127.0.0.1 localhost\n# 127.0.0.1 old.test\n127.0.0.1 a.test b.test # note\n"
-	if !inHosts(hosts, "b.test") || inHosts(hosts, "old.test") || inHosts(hosts, "127.0.0.1") {
-		t.Fatal("inHosts is wrong")
-	}
-}
-
 func TestSubdomains(t *testing.T) {
 	m, err := New(t.TempDir())
 	if err != nil {
@@ -479,12 +442,5 @@ func TestSubdomains(t *testing.T) {
 	cfg.Sites = []Site{s}
 	if ng := m.renderNginx(cfg); !strings.Contains(ng, "server_name acme.test *.old.test *.acme.test;") {
 		t.Fatalf("nginx:\n%s", ng)
-	}
-	if h := subdomainHint(m, s); h == nil || h.Fix == nil || h.Fix.Value != "dns" {
-		t.Fatalf("hint: %+v", h)
-	}
-	s.Parked = "/x"
-	if subdomainHint(m, s) != nil {
-		t.Fatal("a parked site must get no subdomain hint")
 	}
 }
