@@ -30,6 +30,9 @@ type simpleService struct {
 	linkList   func(port int) []Link
 	shellArgv  func(prefix string, port int) []string
 	detailText func(port int) string
+	// readyURL is a health URL that must answer 200 before the service
+	// counts as ready. Without it, an open port is enough.
+	readyURL func(port int) string
 	// started runs once the service answers, for example to make a bucket.
 	started func(port int) error
 }
@@ -93,7 +96,18 @@ func (s *simpleService) ready(m *Manager) bool {
 	if s.readyPort != nil {
 		port = s.readyPort(port)
 	}
-	return dialTCP(port)
+	if !dialTCP(port) {
+		return false
+	}
+	if s.readyURL == nil {
+		return true
+	}
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(s.readyURL(m.servicePortOrDefault(s)))
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 func (s *simpleService) afterStart(m *Manager) error {
@@ -186,9 +200,13 @@ func simpleServices() []extraService {
 			args: func(dir string, port int) []string {
 				data := filepath.Join(dir, "data")
 				os.MkdirAll(data, 0o755)
+				// Without a peering address, Typesense can pick a network address
+				// (for example a VM network) and never becomes ready.
 				return []string{"--data-dir", data, "--api-key", "benchtop", "--api-address", "127.0.0.1",
-					"--api-port", fmt.Sprint(port), "--enable-cors"}
+					"--api-port", fmt.Sprint(port), "--peering-address", "127.0.0.1", "--peering-port", fmt.Sprint(port + 1),
+					"--enable-cors"}
 			},
+			readyURL: func(port int) string { return fmt.Sprintf("http://127.0.0.1:%d/health", port) },
 			envText: func(port int) string {
 				return fmt.Sprintf("SCOUT_DRIVER=typesense\nTYPESENSE_API_KEY=benchtop\nTYPESENSE_HOST=127.0.0.1\nTYPESENSE_PORT=%d\nTYPESENSE_PROTOCOL=http\n", port)
 			},
