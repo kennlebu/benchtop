@@ -118,7 +118,7 @@ func (m *Manager) validateCaddyfile(cfg Config) error {
 }
 
 func (m *Manager) writeCaddyfile() error {
-	content := []byte(m.renderCaddyfile(m.Config()))
+	content := []byte(m.renderCaddyfile(m.siteConfig()))
 	old, _ := os.ReadFile(m.caddyfilePath())
 	if bytes.Equal(old, content) {
 		return nil

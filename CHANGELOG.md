@@ -19,6 +19,14 @@
   core when it has the version, and the `shivammathur/php` tap for older
   versions (7.4, 8.0) and previews. A site that needs a missing PHP
   version gets an Install button on its PHP card.
+- Parked folders: "Park a folder" on the Sites page, and
+  `benchtop park|unpark FOLDER`. Each project folder in it gets
+  `<name>.test`, with `public/` and the PHP version found by Benchtop. The
+  dashboard finds new folders every 5 seconds and reloads Caddy. A parked
+  site that you edit becomes a saved site with your settings.
+- A site hint when a domain is not in `/etc/hosts`, with a "Sync
+  /etc/hosts" button. A new parked folder never opens a password dialog
+  by itself.
 - An open dashboard page reloads by itself when the dashboard restarts.
 - More versions: MySQL 9.7 and the newest MySQL, MariaDB 10.11 to 13.0,
   PostgreSQL 18, Redis 8.2, MongoDB 7.0 to 8.3.

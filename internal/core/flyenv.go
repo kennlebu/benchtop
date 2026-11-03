@@ -77,7 +77,7 @@ func orStatic(php string) string {
 }
 
 func (m *Manager) siteWithDomain(d string) bool {
-	for _, s := range m.Config().Sites {
+	for _, s := range m.Sites() {
 		if contains(s.Domains, d) {
 			return true
 		}

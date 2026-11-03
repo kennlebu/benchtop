@@ -18,7 +18,7 @@ func (m *Manager) PHPForDir(dir string) (PHPVersion, string, error) {
 	}
 	var best Site
 	bestLen := -1
-	for _, s := range m.Config().Sites {
+	for _, s := range m.Sites() {
 		if s.PHP == "" {
 			continue
 		}

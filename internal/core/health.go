@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // SiteFix is a one-click fix for a site problem.
 type SiteFix struct {
 	Label string `json:"label"`
-	// Action is "set-root" (Value is the new root) or "start" (Value is a service ID).
+	// Action is "set-root" (Value is the new root), "start" (Value is a
+	// service ID) or "hosts" (sync /etc/hosts).
 	Action string `json:"action"`
 	Value  string `json:"value"`
 }
@@ -20,12 +22,34 @@ type SiteHint struct {
 	Fix     *SiteFix `json:"fix,omitempty"`
 }
 
+// inHosts tells if /etc/hosts has a line for the domain.
+func inHosts(hosts, domain string) bool {
+	for _, line := range strings.Split(hosts, "\n") {
+		if i := strings.Index(line, "#"); i >= 0 {
+			line = line[:i]
+		}
+		f := strings.Fields(line)
+		for _, name := range f[min(1, len(f)):] {
+			if name == domain {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // SiteHealth finds likely causes of a 404 or a 502 for a site. It only
 // checks files and processes, so it is fast enough to run on each refresh.
 func (m *Manager) SiteHealth(s Site, running map[string]bool) []SiteHint {
 	hints := []SiteHint{}
 	if st, err := os.Stat(s.Root); err != nil || !st.IsDir() {
 		return []SiteHint{{Level: "error", Message: "The root folder does not exist."}}
+	}
+	if d := s.Domains[0]; !strings.HasSuffix(d, ".localhost") && d != "localhost" && !strings.HasPrefix(d, "*.") && !m.wildcardCovers(d) {
+		if hosts, err := os.ReadFile(hostsFile); err == nil && !inHosts(string(hosts), d) {
+			hints = append(hints, SiteHint{Level: "warn", Message: "This domain is not in /etc/hosts yet, so the browser cannot find it.",
+				Fix: &SiteFix{Label: "Sync /etc/hosts", Action: "hosts"}})
+		}
 	}
 	if s.Server == "nginx" {
 		if !(&nginxService{}).Installed() {

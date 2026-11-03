@@ -37,6 +37,9 @@ Usage:
   benchtop sites                       List sites
   benchtop site add DOMAINS ROOT [--php 8.2] [--https] [--server nginx]
   benchtop site rm ID|DOMAIN           Delete a site
+  benchtop park FOLDER                 Give each project in FOLDER a <name>.test site
+  benchtop unpark FOLDER               Remove a parked folder (the files stay)
+  benchtop parked                      List parked folders
   benchtop versions                    List installed PHP versions
   benchtop php [ARGS]                  Run the PHP of the site in this folder
   benchtop composer [ARGS]             Run Composer with that PHP
@@ -133,6 +136,32 @@ func run(args []string) error {
 		return err
 	case "sites":
 		printSites(m)
+		return nil
+	case "park", "unpark":
+		if len(rest) != 1 {
+			return fmt.Errorf("use: benchtop %s FOLDER", cmd)
+		}
+		dir, err := filepath.Abs(rest[0])
+		if err != nil {
+			return err
+		}
+		var warnings []string
+		if cmd == "park" {
+			warnings, err = m.Park(dir)
+		} else {
+			warnings, err = m.Unpark(dir)
+		}
+		for _, w := range warnings {
+			fmt.Println("warning:", w)
+		}
+		if err == nil && cmd == "park" {
+			printSites(m)
+		}
+		return err
+	case "parked":
+		for _, d := range m.Parked() {
+			fmt.Println(d)
+		}
 		return nil
 	case "site":
 		return cmdSite(m, rest)
@@ -269,7 +298,7 @@ func printStatus(m *core.Manager) {
 }
 
 func printSites(m *core.Manager) {
-	sites := m.Config().Sites
+	sites := m.Sites()
 	if len(sites) == 0 {
 		fmt.Println("No sites. Add one with: benchtop site add myapp.test ~/Projects/myapp/public --php 8.3")
 		return
@@ -285,7 +314,11 @@ func printSites(m *core.Manager) {
 		if len(s.Domains) > 1 {
 			url += fmt.Sprintf(" (+%d)", len(s.Domains)-1)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.ID, url, php, s.Root)
+		root := s.Root
+		if s.Parked != "" {
+			root += " (parked)"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.ID, url, php, root)
 	}
 	w.Flush()
 }
@@ -443,6 +476,12 @@ func cmdUI(m *core.Manager, args []string) error {
 		return fmt.Errorf("cannot listen on %s (is the dashboard already running?): %w", addr, err)
 	}
 	srv := &http.Server{Handler: web.Handler(m), ReadHeaderTimeout: 10 * time.Second}
+	// Find new projects in parked folders.
+	go func() {
+		for range time.Tick(5 * time.Second) {
+			m.CheckParked()
+		}
+	}()
 	// Learn which service versions Homebrew has, once a day.
 	go func() {
 		for {

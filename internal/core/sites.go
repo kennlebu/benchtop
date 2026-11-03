@@ -50,6 +50,15 @@ func (m *Manager) saveSite(s Site) (Site, []string, error) {
 	}
 
 	cfg := m.Config()
+	if strings.HasPrefix(s.ID, "parked-") {
+		saved := false
+		for _, other := range cfg.Sites {
+			saved = saved || other.ID == s.ID
+		}
+		if !saved {
+			s.ID = "" // a parked site that the user changes becomes a saved site
+		}
+	}
 	for _, other := range cfg.Sites {
 		if other.ID == s.ID {
 			continue
@@ -79,7 +88,9 @@ func (m *Manager) saveSite(s Site) (Site, []string, error) {
 		}
 	}
 
-	if err := m.validateCaddyfile(cfg); err != nil {
+	check := cfg
+	check.Sites = m.mergeParked(cfg.Sites)
+	if err := m.validateCaddyfile(check); err != nil {
 		return s, nil, err
 	}
 	if err := m.updateConfig(func(c *Config) error { c.Sites = cfg.Sites; return nil }); err != nil {
@@ -180,7 +191,7 @@ const (
 func (m *Manager) hostsDomains() []string {
 	var out []string
 	seen := map[string]bool{}
-	for _, s := range m.Config().Sites {
+	for _, s := range m.Sites() {
 		for _, d := range s.Domains {
 			if strings.HasPrefix(d, "*.") || d == "localhost" || strings.HasSuffix(d, ".localhost") || seen[d] || m.wildcardCovers(d) {
 				continue

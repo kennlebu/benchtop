@@ -48,6 +48,8 @@ func Handler(m *core.Manager) http.Handler {
 	mux.HandleFunc("POST /api/services/{id}/{action}", s.service)
 	mux.HandleFunc("POST /api/start-all", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.StartAll() }))
 	mux.HandleFunc("POST /api/stop-all", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.StopAll() }))
+	mux.HandleFunc("POST /api/parked", s.wrap(func(r *http.Request) (any, error) { return s.parked(r, true) }))
+	mux.HandleFunc("DELETE /api/parked", s.wrap(func(r *http.Request) (any, error) { return s.parked(r, false) }))
 	mux.HandleFunc("POST /api/hosts/sync", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.SyncHosts() }))
 	mux.HandleFunc("POST /api/updates/check", s.wrap(func(r *http.Request) (any, error) {
 		if err := s.m.RefreshCatalog(0); err != nil {
@@ -276,8 +278,9 @@ func (s *server) state() map[string]any {
 	for _, svc := range services {
 		running[svc.ID] = svc.Running
 	}
-	sites := make([]map[string]any, 0, len(cfg.Sites))
-	for _, site := range cfg.Sites {
+	all := s.m.Sites()
+	sites := make([]map[string]any, 0, len(all))
+	for _, site := range all {
 		sites = append(sites, map[string]any{"site": site, "url": core.SiteURL(site), "hints": s.m.SiteHealth(site, running)})
 	}
 	editors, terminals := core.InstalledApps()
@@ -299,6 +302,7 @@ func (s *server) state() map[string]any {
 		"apps":           map[string]any{"editors": editors, "terminals": terminals},
 		"caddyfile":      s.m.CaddyfilePath(),
 		"started":        started,
+		"parked":         s.m.Parked(),
 	}
 }
 
@@ -424,6 +428,23 @@ func (s *server) service(w http.ResponseWriter, r *http.Request) {
 		err = errors.New("unknown action " + action)
 	}
 	reply(w, nil, err)
+}
+
+func (s *server) parked(r *http.Request, add bool) (any, error) {
+	var in struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		return nil, err
+	}
+	var warnings []string
+	var err error
+	if add {
+		warnings, err = s.m.Park(in.Path)
+	} else {
+		warnings, err = s.m.Unpark(in.Path)
+	}
+	return map[string]any{"warnings": warnings}, err
 }
 
 func (s *server) saveSite(r *http.Request) (any, error) {

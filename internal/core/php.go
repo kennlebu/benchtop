@@ -186,7 +186,7 @@ func (m *Manager) stopPHP(key string) error {
 // startNeededPHP starts each PHP version that a site uses.
 func (m *Manager) startNeededPHP() error {
 	needed := map[string]bool{}
-	for _, s := range m.Config().Sites {
+	for _, s := range m.Sites() {
 		if s.PHP != "" {
 			needed[s.PHP] = true
 		}

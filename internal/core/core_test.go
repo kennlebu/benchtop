@@ -406,3 +406,57 @@ func TestPHPFormulas(t *testing.T) {
 		t.Fatalf("phpFormulaFor 8.0: %s", f)
 	}
 }
+
+func TestParkedSites(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, p := range []string{"shop/public", "Blog App", ".hidden", "node_modules", "taken"} {
+		if err := os.MkdirAll(filepath.Join(dir, p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(dir, "shop", "public", "index.php"), []byte("<?php"), 0o644)
+	os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o644)
+	saved := Site{ID: "mine", Domains: []string{"mine.test"}, Root: filepath.Join(dir, "taken")}
+	if err := m.updateConfig(func(c *Config) error {
+		c.Parked = []string{dir}
+		c.Sites = []Site{saved}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !m.scanParked() {
+		t.Fatal("the first scan must report a change")
+	}
+	if m.scanParked() {
+		t.Fatal("a second scan with no change must not report one")
+	}
+	got := map[string]Site{}
+	for _, s := range m.Sites() {
+		got[s.Domains[0]] = s
+	}
+	// "taken" has a saved site, so it gets no parked site.
+	if len(got) != 3 || got["mine.test"].Parked != "" || got["taken.test"].ID != "" {
+		t.Fatalf("got %+v", got)
+	}
+	if s := got["shop.test"]; s.Root != filepath.Join(dir, "shop", "public") || s.Parked != dir || s.ID != "parked-shop" {
+		t.Fatalf("shop: %+v", s)
+	}
+	if _, ok := got["blog-app.test"]; !ok {
+		t.Fatalf("blog-app.test is missing: %+v", got)
+	}
+	os.MkdirAll(filepath.Join(dir, "new"), 0o755)
+	if !m.scanParked() {
+		t.Fatal("a new folder must report a change")
+	}
+}
+
+func TestInHosts(t *testing.T) {
+	hosts := "127.0.0.1 localhost\n# 127.0.0.1 old.test\n127.0.0.1 a.test b.test # note\n"
+	if !inHosts(hosts, "b.test") || inHosts(hosts, "old.test") || inHosts(hosts, "127.0.0.1") {
+		t.Fatal("inHosts is wrong")
+	}
+}

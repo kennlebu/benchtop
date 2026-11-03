@@ -164,8 +164,9 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
   </nav>
   <main>
     <section class="view" id="view-sites">
-      <div class="view-head"><h1>Sites</h1><button class="btn primary" onclick="editSite()">Add site</button></div>
+      <div class="view-head"><h1>Sites</h1><div class="tools"><button class="btn" onclick="parkFolder()">Park a folder</button><button class="btn primary" onclick="editSite()">Add site</button></div></div>
       <div id="sites"></div>
+      <div id="parked"></div>
     </section>
 
     <section class="view" id="view-services">
@@ -428,9 +429,31 @@ function siteDot(entry) {
   return 'ok';
 }
 
+function renderParked() {
+  const list = state.parked || [];
+  $('#parked').innerHTML = !list.length ? '' : `<div class="section" style="margin-top:14px">
+    <h2>Parked folders</h2>
+    <p>Each project folder in a parked folder gets a site: <code>name.test</code>. Benchtop finds new folders by itself.</p>
+    ${list.map(d => `<div class="switch-row" style="margin-top:6px"><span class="sub" style="flex:1;font-family:'SF Mono',Menlo,monospace;font-size:12px">${esc(d)}</span>
+      <button class="btn small" onclick="unparkFolder(${esc(JSON.stringify(d))})">Remove</button></div>`).join('')}
+  </div>`;
+}
+
+async function parkFolder() {
+  const r = await api('POST', '/api/pick-folder').catch(() => ({}));
+  if (!r.path) return;
+  busy(null, async () => { const res = await api('POST', '/api/parked', {path: r.path}); toast('Parked ' + r.path); warnings(res.warnings); });
+}
+
+function unparkFolder(path) {
+  if (!confirm(`Remove the parked folder ${path}? Its sites go away. Your files stay, and sites that you saved stay.`)) return;
+  busy(null, async () => { const res = await api('DELETE', '/api/parked', {path}); warnings(res.warnings); });
+}
+
 function renderSites() {
+  renderParked();
   if (!state.sites.length) {
-    $('#sites').innerHTML = `<div class="list empty">No sites yet.<br><br><button class="btn primary" onclick="editSite()">Add site</button> <button class="btn" onclick="go('settings')">Import from FlyEnv</button></div>`;
+    $('#sites').innerHTML = `<div class="list empty">No sites yet.<br><br><button class="btn primary" onclick="editSite()">Add site</button> <button class="btn" onclick="parkFolder()">Park a folder</button> <button class="btn" onclick="go('settings')">Import from FlyEnv</button></div>`;
     return;
   }
   $('#sites').innerHTML = `<div class="list">${state.sites.map(e => {
@@ -442,7 +465,7 @@ function renderSites() {
           <div class="name"><a href="${esc(e.url)}" target="_blank">${esc(s.domains[0])}</a>${s.https ? ' <span class="badge">HTTPS</span>' : ''}${s.domains.length > 1 ? ` <span class="badge" title="${esc(s.domains.slice(1).join(', '))}">+${s.domains.length - 1}</span>` : ''}</div>
           <div class="sub" title="${esc(s.root)}">${esc(s.root)}</div>
         </div>
-        ${s.server === 'nginx' ? '<span class="badge">Nginx</span>' : ''}<span class="badge">${s.php ? 'PHP ' + esc(s.php) : 'Static'}</span>
+        ${s.parked ? `<span class="badge" title="From the parked folder ${esc(s.parked)}">Parked</span>` : ''}${s.server === 'nginx' ? '<span class="badge">Nginx</span>' : ''}<span class="badge">${s.php ? 'PHP ' + esc(s.php) : 'Static'}</span>
         <a class="icon hide-sm" href="${esc(e.url)}" target="_blank" title="Open in browser" aria-label="Open ${esc(s.domains[0])} in browser">${ICONS.open}</a>
         <button class="icon" title="Show folder in Finder" aria-label="Show folder" onclick="openPath('finder', ${esc(JSON.stringify(s.root))})">${ICONS.folder}</button>
         <button class="icon" title="More" aria-label="More actions" onclick="siteMenu(event, '${esc(s.id)}')">${ICONS.more}</button>
@@ -459,8 +482,8 @@ function siteMenu(ev, id) {
     ['Open in ' + editorName(), () => openPath('editor', projectDir(s.root))],
     ['Open terminal here', () => openPath('terminal', projectDir(s.root))],
     ['Access log', () => go('logs', 'site-' + id)],
-    null,
-    ['Delete', () => deleteSite(id), 'danger-text'],
+    // A parked site goes away with its folder, so it has no Delete.
+    ...(s.parked ? [] : [null, ['Delete', () => deleteSite(id), 'danger-text']]),
   ]);
 }
 
@@ -476,6 +499,9 @@ function applyFix(btn, id, i) {
       toast('Root is now ' + r.site.root); warnings(r.warnings);
     } else if (fix.action === 'start') {
       await startService(fix.value);
+    } else if (fix.action === 'hosts') {
+      await api('POST', '/api/hosts/sync');
+      toast('/etc/hosts is up to date');
     }
   });
 }
@@ -490,7 +516,7 @@ function phpOptions(select, current) {
 function editSite(id) {
   const f = $('#siteDlg form');
   const s = id ? state.sites.find(x => x.site.id === id).site : null;
-  $('#siteTitle').textContent = s ? 'Edit site' : 'Add site';
+  $('#siteTitle').textContent = s ? (s.parked ? 'Edit parked site' : 'Edit site') : 'Add site';
   f.id.value = s ? s.id : '';
   f.root.value = s ? s.root : '';
   f.domains.value = s ? s.domains.join(', ') : '';
@@ -502,7 +528,7 @@ function editSite(id) {
   f.server.value = s ? s.server || '' : '';
   serverChanged();
   f.querySelector('details').open = !!(s && (s.https || s.extra || s.server));
-  $('#rootNote').textContent = s ? '' : 'Choose the project folder. Benchtop suggests the rest.';
+  $('#rootNote').textContent = s ? (s.parked ? 'When you save, Benchtop keeps this site with your settings, also if the parked folder goes away.' : '') : 'Choose the project folder. Benchtop suggests the rest.';
   $('#phpNote').textContent = '';
   $('#siteDlg').showModal();
 }

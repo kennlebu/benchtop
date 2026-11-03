@@ -102,7 +102,7 @@ func (s *nginxService) prepare(m *Manager) error {
 			return err
 		}
 	}
-	if err := os.WriteFile(s.conf(m), []byte(m.renderNginx(m.Config())), 0o644); err != nil {
+	if err := os.WriteFile(s.conf(m), []byte(m.renderNginx(m.siteConfig())), 0o644); err != nil {
 		return err
 	}
 	if _, err := run(s.bin(), "-t", "-p", m.extraDir(s), "-c", s.conf(m)); err != nil {
@@ -119,7 +119,7 @@ func (s *nginxService) ready(m *Manager) bool       { return dialTCP(m.servicePo
 func (s *nginxService) afterStart(m *Manager) error { return nil }
 
 func (s *nginxService) detail(m *Manager) string {
-	return fmt.Sprintf("port %d (behind Caddy), %d sites", m.servicePortOrDefault(s), len(nginxSites(m.Config())))
+	return fmt.Sprintf("port %d (behind Caddy), %d sites", m.servicePortOrDefault(s), len(nginxSites(m.siteConfig())))
 }
 
 func (s *nginxService) files(m *Manager) []ConfigFile {
@@ -132,7 +132,7 @@ func (s *nginxService) env(m *Manager) string   { return "" }
 // when Caddy runs and a site needs it.
 func (m *Manager) applyNginx() error {
 	s := &nginxService{}
-	need := len(nginxSites(m.Config())) > 0
+	need := len(nginxSites(m.siteConfig())) > 0
 	_, running := m.extraRunning(s.ID())
 	if !s.Installed() {
 		if need {

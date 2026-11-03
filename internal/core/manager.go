@@ -52,6 +52,7 @@ func New(home string) (*Manager, error) {
 	}
 	m.cfg = cfg
 	m.LoadCatalog()
+	m.scanParked()
 	return m, nil
 }
 
@@ -74,6 +75,7 @@ func (m *Manager) Config() Config {
 	defer m.cfgMu.Unlock()
 	c := *m.cfg
 	c.Sites = append([]Site(nil), m.cfg.Sites...)
+	c.Parked = append([]string(nil), m.cfg.Parked...)
 	c.Services = copyServices(m.cfg.Services)
 	return c
 }
@@ -83,6 +85,7 @@ func (m *Manager) updateConfig(fn func(c *Config) error) error {
 	defer m.cfgMu.Unlock()
 	next := *m.cfg
 	next.Sites = append([]Site(nil), m.cfg.Sites...)
+	next.Parked = append([]string(nil), m.cfg.Parked...)
 	next.Services = copyServices(m.cfg.Services)
 	if err := fn(&next); err != nil {
 		return err
@@ -132,11 +135,12 @@ func (m *Manager) Status() []ServiceStatus {
 	pid, running := m.caddyRunning()
 	caddy := ServiceStatus{ID: "caddy", Name: "Caddy", Kind: "web", Installed: m.caddyBin() != "", Running: running, PID: pid}
 	caddy.Version = m.caddyVersion()
-	caddy.Detail = fmt.Sprintf("HTTP :%d, HTTPS :%d, %d sites", cfg.HTTPPort, cfg.HTTPSPort, len(cfg.Sites))
+	sites := m.Sites()
+	caddy.Detail = fmt.Sprintf("HTTP :%d, HTTPS :%d, %d sites", cfg.HTTPPort, cfg.HTTPSPort, len(sites))
 	out = append(out, caddy)
 
 	used := map[string][]string{}
-	for _, s := range cfg.Sites {
+	for _, s := range sites {
 		if s.PHP != "" {
 			used[s.PHP] = append(used[s.PHP], s.Domains[0])
 		}
@@ -320,7 +324,7 @@ func (m *Manager) LogFiles() map[string]string {
 	for _, v := range DiscoverPHP() {
 		files["php-"+v.Key] = filepath.Join(m.phpDir(v.Key), "log", "php-fpm.log")
 	}
-	for _, s := range m.Config().Sites {
+	for _, s := range m.Sites() {
 		files["site-"+s.ID] = m.path("logs", "sites", s.ID+".log")
 	}
 	return files

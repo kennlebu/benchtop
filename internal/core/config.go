@@ -23,6 +23,9 @@ type Site struct {
 	// Extra is raw text added inside the site block: Caddyfile text, or
 	// Nginx text for an Nginx site.
 	Extra string `json:"extra,omitempty"`
+	// Parked is the parked folder of a site that Benchtop found, and "" for
+	// a saved site. Benchtop never saves it.
+	Parked string `json:"parked,omitempty"`
 }
 
 type FTPSettings struct {
@@ -60,6 +63,8 @@ type Config struct {
 	Editor   string `json:"editor,omitempty"`
 	Terminal string `json:"terminal,omitempty"`
 	Sites    []Site `json:"sites"`
+	// Parked are folders of projects. Each project gets a site.
+	Parked []string `json:"parked,omitempty"`
 	// Services holds settings for databases and other extra services, by ID.
 	Services map[string]ServiceSettings `json:"services,omitempty"`
 }
@@ -114,6 +119,7 @@ var domainRe = regexp.MustCompile(`^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])
 
 // NormalizeSite cleans the input and checks that the site is valid.
 func NormalizeSite(s Site) (Site, error) {
+	s.Parked = ""
 	var domains []string
 	seen := map[string]bool{}
 	for _, d := range s.Domains {
