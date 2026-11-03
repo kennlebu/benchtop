@@ -320,7 +320,7 @@ func (s *mysqlService) shell(m *Manager) error {
 }
 
 func (s *mysqlService) detail(m *Manager) string {
-	return fmt.Sprintf("port %d · data %s", m.servicePortOrDefault(s), shortPath(s.dataDir(m)))
+	return fmt.Sprintf("port %d, data %s", m.servicePortOrDefault(s), shortPath(s.dataDir(m)))
 }
 
 func shortPath(p string) string {

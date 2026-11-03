@@ -18,6 +18,13 @@
 - Backup and restore: `benchtop backup|restore FILE` and Settings → Backup.
   FTP users get the user ID of this Mac.
 
+### Changed
+
+- New dashboard font (Avenir Next) and monospace font (SF Mono).
+- Colours now meet WCAG 2.1 AA in light and dark mode. Field borders are
+  darker, and the dark mode buttons have dark text.
+- Status text uses commas in place of "·".
+
 ## v0.3.0 (unreleased)
 
 ### Added

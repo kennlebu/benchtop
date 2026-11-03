@@ -188,7 +188,7 @@ func (s *postgresService) shell(m *Manager) error {
 }
 
 func (s *postgresService) detail(m *Manager) string {
-	return fmt.Sprintf("port %d · data %s", m.servicePortOrDefault(s), shortPath(s.dataDir(m)))
+	return fmt.Sprintf("port %d, data %s", m.servicePortOrDefault(s), shortPath(s.dataDir(m)))
 }
 
 func (s *postgresService) files(m *Manager) []ConfigFile {

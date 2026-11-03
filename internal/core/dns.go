@@ -210,7 +210,7 @@ func (s *dnsService) detail(m *Manager) string {
 	for _, t := range m.DNSTLDs() {
 		parts = append(parts, "*."+t)
 	}
-	return strings.Join(parts, ", ") + " → this Mac"
+	return strings.Join(parts, ", ") + " point to this Mac"
 }
 
 func (s *dnsService) files(m *Manager) []ConfigFile { return nil }

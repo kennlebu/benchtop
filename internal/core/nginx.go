@@ -119,7 +119,7 @@ func (s *nginxService) ready(m *Manager) bool       { return dialTCP(m.servicePo
 func (s *nginxService) afterStart(m *Manager) error { return nil }
 
 func (s *nginxService) detail(m *Manager) string {
-	return fmt.Sprintf("port %d (behind Caddy) · %d sites", m.servicePortOrDefault(s), len(nginxSites(m.Config())))
+	return fmt.Sprintf("port %d (behind Caddy), %d sites", m.servicePortOrDefault(s), len(nginxSites(m.Config())))
 }
 
 func (s *nginxService) files(m *Manager) []ConfigFile {

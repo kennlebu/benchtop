@@ -179,7 +179,7 @@ include %s
 			},
 			readyPort: func(port int) int { return port + 7000 },
 			detailText: func(port int) string {
-				return fmt.Sprintf("SMTP port %d · inbox port %d", port, port+7000)
+				return fmt.Sprintf("SMTP port %d, inbox port %d", port, port+7000)
 			},
 			linkList: func(port int) []Link {
 				return []Link{{Label: "Open inbox", URL: fmt.Sprintf("http://127.0.0.1:%d", port+7000)}}
