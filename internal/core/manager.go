@@ -159,7 +159,9 @@ func (m *Manager) Status() []ServiceStatus {
 	}
 	sort.Strings(missing)
 	for _, k := range missing {
-		out = append(out, ServiceStatus{ID: "php-" + k, Name: "PHP-FPM " + k, Kind: "php", Detail: "Run: brew install php@" + k, UsedBy: used[k]})
+		f := phpFormulaFor(k)
+		out = append(out, ServiceStatus{ID: "php-" + k, Name: "PHP-FPM " + k, Kind: "php", Detail: "Not installed. Homebrew formula: " + f,
+			UsedBy: used[k], Formula: f, Installing: m.isInstalling(f)})
 	}
 
 	pid, running = m.ftpRunning()

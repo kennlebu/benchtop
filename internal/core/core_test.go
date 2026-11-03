@@ -378,3 +378,31 @@ func TestExtensionIni(t *testing.T) {
 		t.Fatal("wrong xdebug release for the PHP version")
 	}
 }
+
+func TestPHPFormulas(t *testing.T) {
+	catalogMu.Lock()
+	old := catalog
+	catalog = map[string]catalogEntry{
+		"php": {Version: "8.5.12"}, "php@8.4": {Version: "8.4.27"}, "php@8.1": {Version: "8.1.34", Deprecated: true},
+		"shivammathur/php/php@8.4": {Version: "8.4.27"}, "shivammathur/php/php@7.4": {Version: "7.4.33"},
+		"shivammathur/php/php@8.6": {Version: "8.6.0"}, "shivammathur/php/php@7.0": {Version: "7.0.33", Disabled: true},
+	}
+	catalogMu.Unlock()
+	defer func() { catalogMu.Lock(); catalog = old; catalogMu.Unlock() }()
+	got := phpFormulas()
+	want := map[string]string{"8.5": "php", "8.4": "php@8.4", "8.1": "php@8.1", "7.4": "shivammathur/php/php@7.4", "8.6": "shivammathur/php/php@8.6"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	}
+	for k, f := range want {
+		if got[k].Formula != f {
+			t.Fatalf("PHP %s: got %s, want %s", k, got[k].Formula, f)
+		}
+	}
+	if !got["8.6"].Preview || got["8.5"].Preview {
+		t.Fatalf("preview: %+v", got)
+	}
+	if f := phpFormulaFor("8.0"); f != "shivammathur/php/php@8.0" {
+		t.Fatalf("phpFormulaFor 8.0: %s", f)
+	}
+}

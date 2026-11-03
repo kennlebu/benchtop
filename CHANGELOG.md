@@ -14,6 +14,12 @@
   upgrade if it ran. Settings has "Check for updates", and the command
   line has `benchtop upgrade SERVICE`. A new build of the same version
   (a Homebrew revision) does not count as an update.
+- Install PHP from the dashboard: an "Add a PHP version" card on the
+  Services page, and `benchtop install php-8.4`. Benchtop uses Homebrew
+  core when it has the version, and the `shivammathur/php` tap for older
+  versions (7.4, 8.0) and previews. A site that needs a missing PHP
+  version gets an Install button on its PHP card.
+- An open dashboard page reloads by itself when the dashboard restarts.
 - More versions: MySQL 9.7 and the newest MySQL, MariaDB 10.11 to 13.0,
   PostgreSQL 18, Redis 8.2, MongoDB 7.0 to 8.3.
 

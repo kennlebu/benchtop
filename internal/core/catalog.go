@@ -226,6 +226,9 @@ func (m *Manager) RefreshCatalog(maxAge time.Duration) error {
 	for _, fam := range families() {
 		parts = append(parts, regexp.QuoteMeta(fam.tap+fam.base))
 	}
+	for _, p := range phpSearchPatterns {
+		parts = append(parts, regexp.QuoteMeta(p))
+	}
 	env := append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1", "HOMEBREW_NO_ENV_HINTS=1")
 	search := exec.Command(brew, "search", "/^("+strings.Join(parts, "|")+`)(@[0-9.]+)?$/`)
 	search.Env = env

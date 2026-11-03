@@ -393,6 +393,7 @@ function connect() {
 }
 
 function render(s) {
+  if (state && state.started && s.started !== state.started) { location.reload(); return; }
   state = s;
   const svcs = s.services.filter(x => x.installed && (
     x.kind === 'php' ? x.running || (x.usedBy || []).length :
@@ -554,7 +555,9 @@ function deleteSite(id) {
 
 // ---------- Services ----------
 function renderServices() {
-  $('#services').innerHTML = state.services.filter(s => !isExtra(s)).map(s => `
+  const chosen = $('#ver-php') && $('#ver-php').value;
+  const list = state.services.filter(s => !isExtra(s));
+  const cards = list.map(s => `
     <div class="card">
       <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
       <div class="meta">${esc(s.running ? 'Running' : s.installed ? 'Stopped' : 'Not installed')}${s.admin ? ', needs your password' : ''}<br>${esc(s.detail)}${s.usedBy && s.usedBy.length ? `<br>Used by ${esc(s.usedBy.join(', '))}` : ''}${updateLine(s)}</div>
@@ -566,7 +569,34 @@ function renderServices() {
         <span class="spacer"></span>
         <button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="serviceMenu(event, '${s.id}')">${ICONS.more}</button>
       </div>
-    </div>`).join('');
+    </div>`);
+  // The "Add a PHP version" card comes after the last PHP card.
+  const lastPHP = list.map(s => s.kind).lastIndexOf('php');
+  const add = addPHPCard();
+  if (add) cards.splice(lastPHP + 1, 0, add);
+  $('#services').innerHTML = cards.join('');
+  if (chosen && $('#ver-php')) $('#ver-php').value = chosen;
+}
+
+function addPHPCard() {
+  const choices = state.phpChoices || [];
+  if (state.phpInstalling) return `
+    <div class="card">
+      <div class="top"><span class="dot"></span><span class="name">PHP ${esc(state.phpInstalling)}</span></div>
+      <div class="meta">Installing with Homebrew. This can take some minutes.</div>
+      <div class="actions"><button class="btn small" onclick="go('logs','brew')">View output</button></div>
+    </div>`;
+  if (!choices.length) return '';
+  const label = c => c.key + (c.preview ? ' (preview)' : c.deprecated ? ' (end of life)' : '');
+  // Choose the newest final release, not a preview.
+  const pick = (choices.find(c => !c.preview) || choices[0]).key;
+  return `
+    <div class="card">
+      <div class="top"><span class="dot"></span><span class="name">Add a PHP version</span></div>
+      <div class="meta">Each version runs on its own socket, so sites can use different versions.</div>
+      <div class="actions"><select id="ver-php" aria-label="PHP version">${choices.map(c => `<option value="${esc(c.key)}" ${c.key === pick ? 'selected' : ''}>${esc(label(c))}</option>`).join('')}</select>
+        <button class="btn small primary" onclick="install(this, 'php-' + $('#ver-php').value)">Install</button></div>
+    </div>`;
 }
 
 function serviceMenu(ev, id) {

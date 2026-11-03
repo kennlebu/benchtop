@@ -33,6 +33,7 @@ benchtop ftp add myuser ~/Projects/myapp/ftp
 benchtop install redis     # install a service with Homebrew
 benchtop install mysql-8.0 # install another version, next to the others
 benchtop upgrade caddy     # upgrade with Homebrew, then restart it
+benchtop install php-8.4   # add a PHP version
 benchtop start mysql-8.4
 benchtop db create mysql-8.4 myapp
 benchtop db env mysql-8.4  # .env lines for Laravel

@@ -24,6 +24,10 @@ import (
 //go:embed static
 var static embed.FS
 
+// started changes each time the dashboard starts. An open page reloads when
+// it sees a new value, so it never runs old code against a new server.
+var started = time.Now().UnixNano()
+
 type server struct {
 	m *core.Manager
 }
@@ -283,7 +287,10 @@ func (s *server) state() map[string]any {
 		"services": services,
 		"sites":    sites,
 		"php":      core.DiscoverPHP(),
-		"ftpUsers": users,
+		// The PHP versions that the "Add a PHP version" card can install.
+		"phpChoices":    s.m.PHPChoices(),
+		"phpInstalling": s.m.PHPInstalling(),
+		"ftpUsers":      users,
 		"settings": core.Settings{
 			Login: cfg.Login, Editor: cfg.Editor, Terminal: cfg.Terminal,
 			HTTPPort: cfg.HTTPPort, HTTPSPort: cfg.HTTPSPort, FTPPort: cfg.FTP.Port,
@@ -291,6 +298,7 @@ func (s *server) state() map[string]any {
 		"loginInstalled": loginErr == nil,
 		"apps":           map[string]any{"editors": editors, "terminals": terminals},
 		"caddyfile":      s.m.CaddyfilePath(),
+		"started":        started,
 	}
 }
 
