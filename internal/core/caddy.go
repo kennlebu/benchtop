@@ -66,8 +66,9 @@ func (m *Manager) renderCaddyfile(cfg Config) string {
 `, m.configPath(), cfg.CaddyAdmin, cfg.HTTPPort, cfg.HTTPSPort, m.path("caddy", "data"), m.path("logs", "caddy.log"))
 
 	for _, s := range cfg.Sites {
-		addrs := make([]string, len(s.Domains))
-		for i, d := range s.Domains {
+		hosts := s.Hosts()
+		addrs := make([]string, len(hosts))
+		for i, d := range hosts {
 			if s.HTTPS {
 				addrs[i] = d
 			} else {

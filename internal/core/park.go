@@ -112,7 +112,7 @@ func (m *Manager) scanParked() bool {
 			php, _ := suggestPHP(project, root, installed)
 			found = append(found, Site{
 				ID: "parked-" + slug, Domains: []string{slug + ".test"}, Root: root, PHP: php,
-				Parked: dir,
+				Subdomains: true, Parked: dir,
 			})
 		}
 	}

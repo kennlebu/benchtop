@@ -35,6 +35,7 @@ benchtop install mysql-8.0 # install another version, next to the others
 benchtop upgrade caddy     # upgrade with Homebrew, then restart it
 benchtop install php-8.4   # add a PHP version
 benchtop park ~/Projects   # each project in it gets <name>.test
+benchtop site add acme.test ~/Projects/acme/public --subdomains  # *.acme.test too
 benchtop start mysql-8.4
 benchtop db create mysql-8.4 myapp
 benchtop db env mysql-8.4  # .env lines for Laravel

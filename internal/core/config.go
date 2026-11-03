@@ -18,6 +18,9 @@ type Site struct {
 	// PHP is a version key such as "8.2". Empty means a static site.
 	PHP   string `json:"php"`
 	HTTPS bool   `json:"https"`
+	// Subdomains sends every subdomain, for example api.acme.test, to the
+	// site too. The browser finds them only with the wildcard DNS.
+	Subdomains bool `json:"subdomains,omitempty"`
 	// Server is "" for Caddy, or "nginx" for Nginx behind Caddy.
 	Server string `json:"server,omitempty"`
 	// Extra is raw text added inside the site block: Caddyfile text, or
@@ -163,6 +166,21 @@ func NormalizeSite(s Site) (Site, error) {
 		return s, fmt.Errorf("web server %q is not known. Use caddy or nginx", s.Server)
 	}
 	return s, nil
+}
+
+// Hosts are the names that the web server answers for: the domains, plus
+// "*.domain" for each one when Subdomains is on.
+func (s Site) Hosts() []string {
+	out := append([]string(nil), s.Domains...)
+	if !s.Subdomains {
+		return out
+	}
+	for _, d := range s.Domains {
+		if w := "*." + d; !strings.HasPrefix(d, "*.") && !contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 func slugify(s string) string {

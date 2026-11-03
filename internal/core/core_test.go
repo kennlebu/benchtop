@@ -460,3 +460,31 @@ func TestInHosts(t *testing.T) {
 		t.Fatal("inHosts is wrong")
 	}
 }
+
+func TestSubdomains(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Site{ID: "acme", Domains: []string{"acme.test", "*.old.test"}, Root: "/tmp", Subdomains: true}
+	if got := strings.Join(s.Hosts(), ","); got != "acme.test,*.old.test,*.acme.test" {
+		t.Fatalf("Hosts: %s", got)
+	}
+	cfg := m.Config()
+	cfg.Sites = []Site{s}
+	if cf := m.renderCaddyfile(cfg); !strings.Contains(cf, "http://acme.test, http://*.old.test, http://*.acme.test {") {
+		t.Fatalf("Caddyfile:\n%s", cf)
+	}
+	s.Server = "nginx"
+	cfg.Sites = []Site{s}
+	if ng := m.renderNginx(cfg); !strings.Contains(ng, "server_name acme.test *.old.test *.acme.test;") {
+		t.Fatalf("nginx:\n%s", ng)
+	}
+	if h := subdomainHint(m, s); h == nil || h.Fix == nil || h.Fix.Value != "dns" {
+		t.Fatalf("hint: %+v", h)
+	}
+	s.Parked = "/x"
+	if subdomainHint(m, s) != nil {
+		t.Fatal("a parked site must get no subdomain hint")
+	}
+}

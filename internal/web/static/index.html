@@ -280,6 +280,7 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
     <details>
       <summary>Advanced</summary>
       <label class="check" style="margin-top:10px"><input type="checkbox" name="https"> Use HTTPS (Caddy local certificate)</label>
+      <label class="check" style="margin-top:6px"><input type="checkbox" name="subdomains"> Subdomains: send <code>*.domain</code> to this site too</label>
       <label class="field" for="siteServer">Web server</label>
       <select id="siteServer" name="server" onchange="serverChanged()">
         <option value="">Caddy</option>
@@ -462,7 +463,7 @@ function renderSites() {
       <div class="item-main">
         <span class="dot ${siteDot(e)}"></span>
         <div class="item-title">
-          <div class="name"><a href="${esc(e.url)}" target="_blank">${esc(s.domains[0])}</a>${s.https ? ' <span class="badge">HTTPS</span>' : ''}${s.domains.length > 1 ? ` <span class="badge" title="${esc(s.domains.slice(1).join(', '))}">+${s.domains.length - 1}</span>` : ''}</div>
+          <div class="name"><a href="${esc(e.url)}" target="_blank">${esc(s.domains[0])}</a>${s.https ? ' <span class="badge">HTTPS</span>' : ''}${s.subdomains && !s.parked ? ` <span class="badge" title="*.${esc(s.domains[0])} goes to this site too">Subdomains</span>` : ''}${s.domains.length > 1 ? ` <span class="badge" title="${esc(s.domains.slice(1).join(', '))}">+${s.domains.length - 1}</span>` : ''}</div>
           <div class="sub" title="${esc(s.root)}">${esc(s.root)}</div>
         </div>
         ${s.parked ? `<span class="badge" title="From the parked folder ${esc(s.parked)}">Parked</span>` : ''}${s.server === 'nginx' ? '<span class="badge">Nginx</span>' : ''}<span class="badge">${s.php ? 'PHP ' + esc(s.php) : 'Static'}</span>
@@ -524,10 +525,11 @@ function editSite(id) {
   if (s) f.domains.dataset.dirty = 1;
   phpOptions(f.php, s ? s.php : '');
   f.https.checked = s ? !!s.https : false;
+  f.subdomains.checked = s ? !!s.subdomains : false;
   f.extra.value = s ? s.extra || '' : '';
   f.server.value = s ? s.server || '' : '';
   serverChanged();
-  f.querySelector('details').open = !!(s && (s.https || s.extra || s.server));
+  f.querySelector('details').open = !!(s && (s.https || s.subdomains || s.extra || s.server));
   $('#rootNote').textContent = s ? (s.parked ? 'When you save, Benchtop keeps this site with your settings, also if the parked folder goes away.' : '') : 'Choose the project folder. Benchtop suggests the rest.';
   $('#phpNote').textContent = '';
   $('#siteDlg').showModal();
@@ -564,7 +566,7 @@ async function saveSite(ev) {
   await busy(f.querySelector('button.primary'), async () => {
     const r = await api('POST', '/api/sites', {
       id: f.id.value, domains: [f.domains.value], root: f.root.value,
-      php: f.php.value, https: f.https.checked, extra: f.extra.value, server: f.server.value,
+      php: f.php.value, https: f.https.checked, subdomains: f.subdomains.checked, extra: f.extra.value, server: f.server.value,
     });
     $('#siteDlg').close();
     toast('Saved ' + r.site.domains[0]);

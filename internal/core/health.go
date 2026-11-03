@@ -38,6 +38,29 @@ func inHosts(hosts, domain string) bool {
 	return false
 }
 
+// subdomainHint tells when the subdomains of a site cannot work, because
+// the wildcard DNS does not answer for them.
+func subdomainHint(m *Manager, s Site) *SiteHint {
+	var wild string
+	for _, h := range s.Hosts() {
+		if strings.HasPrefix(h, "*.") {
+			wild = h
+			break
+		}
+	}
+	// A parked site has subdomains on by default. It gets no hint, because
+	// the user did not ask for them.
+	if wild == "" || s.Parked != "" || m.wildcardCovers("x"+wild[1:]) {
+		return nil
+	}
+	if _, running := m.extraRunning("dns"); !running {
+		return &SiteHint{Level: "warn", Message: "Subdomains such as " + "api" + wild[1:] + " need wildcard domains.",
+			Fix: &SiteFix{Label: "Turn on wildcard domains", Action: "start", Value: "dns"}}
+	}
+	tld := wild[strings.LastIndex(wild, ".")+1:]
+	return &SiteHint{Level: "warn", Message: "Subdomains need the domain ending ." + tld + ". Add it in the menu of the Wildcard domains card."}
+}
+
 // SiteHealth finds likely causes of a 404 or a 502 for a site. It only
 // checks files and processes, so it is fast enough to run on each refresh.
 func (m *Manager) SiteHealth(s Site, running map[string]bool) []SiteHint {
@@ -50,6 +73,9 @@ func (m *Manager) SiteHealth(s Site, running map[string]bool) []SiteHint {
 			hints = append(hints, SiteHint{Level: "warn", Message: "This domain is not in /etc/hosts yet, so the browser cannot find it.",
 				Fix: &SiteFix{Label: "Sync /etc/hosts", Action: "hosts"}})
 		}
+	}
+	if wild := subdomainHint(m, s); wild != nil {
+		hints = append(hints, *wild)
 	}
 	if s.Server == "nginx" {
 		if !(&nginxService{}).Installed() {

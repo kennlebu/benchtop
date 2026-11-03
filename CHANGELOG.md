@@ -24,6 +24,9 @@
   `<name>.test`, with `public/` and the PHP version found by Benchtop. The
   dashboard finds new folders every 5 seconds and reloads Caddy. A parked
   site that you edit becomes a saved site with your settings.
+- Subdomains: a site option (Advanced, or `--subdomains`) that sends
+  `*.domain` to the site too, in Caddy and in Nginx. Parked sites have it
+  on. Subdomains need the wildcard DNS; a site hint offers to turn it on.
 - A site hint when a domain is not in `/etc/hosts`, with a "Sync
   /etc/hosts" button. A new parked folder never opens a password dialog
   by itself.

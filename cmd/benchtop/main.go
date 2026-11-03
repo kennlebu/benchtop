@@ -35,7 +35,7 @@ Usage:
   benchtop stop [SERVICE]              Stop all, or one service
   benchtop restart SERVICE [--force]   Restart one service
   benchtop sites                       List sites
-  benchtop site add DOMAINS ROOT [--php 8.2] [--https] [--server nginx]
+  benchtop site add DOMAINS ROOT [--php 8.2] [--https] [--subdomains] [--server nginx]
   benchtop site rm ID|DOMAIN           Delete a site
   benchtop park FOLDER                 Give each project in FOLDER a <name>.test site
   benchtop unpark FOLDER               Remove a parked folder (the files stay)
@@ -332,6 +332,7 @@ func cmdSite(m *core.Manager, args []string) error {
 		fs := flag.NewFlagSet("site add", flag.ExitOnError)
 		php := fs.String("php", "", "PHP version, for example 8.2 (empty for static)")
 		https := fs.Bool("https", false, "serve with HTTPS")
+		subdomains := fs.Bool("subdomains", false, "send *.DOMAIN to the site too")
 		server := fs.String("server", "", "web server: caddy (default) or nginx")
 		fs.Parse(reorder(args[1:]))
 		if fs.NArg() != 2 {
@@ -342,7 +343,7 @@ func cmdSite(m *core.Manager, args []string) error {
 			wd, _ := os.Getwd()
 			root = wd + "/" + root
 		}
-		s, warnings, err := m.SaveSite(core.Site{Domains: []string{fs.Arg(0)}, Root: root, PHP: *php, HTTPS: *https, Server: *server})
+		s, warnings, err := m.SaveSite(core.Site{Domains: []string{fs.Arg(0)}, Root: root, PHP: *php, HTTPS: *https, Subdomains: *subdomains, Server: *server})
 		if err != nil {
 			return err
 		}

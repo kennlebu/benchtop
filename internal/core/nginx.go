@@ -67,7 +67,7 @@ http {
 	port := m.servicePortOrDefault(s)
 	for _, site := range nginxSites(cfg) {
 		fmt.Fprintf(&b, "\n\t# site: %s\n\tserver {\n\t\tlisten 127.0.0.1:%d;\n\t\tserver_name %s;\n\t\troot \"%s\";\n",
-			site.ID, port, strings.Join(site.Domains, " "), site.Root)
+			site.ID, port, strings.Join(site.Hosts(), " "), site.Root)
 		if site.PHP != "" {
 			fmt.Fprintf(&b, `		index index.php index.html;
 		location / {
