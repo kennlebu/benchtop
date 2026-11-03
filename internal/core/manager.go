@@ -106,12 +106,14 @@ type ServiceStatus struct {
 	Admin     bool         `json:"admin"`
 	Files     []ConfigFile `json:"files,omitempty"`
 	// These fields are for extra services (databases and mail).
-	Enabled    bool   `json:"enabled,omitempty"`
-	Formula    string `json:"formula,omitempty"`
-	Installing bool   `json:"installing,omitempty"`
-	DataSource string `json:"dataSource,omitempty"`
-	Links      []Link `json:"links,omitempty"`
-	FlyEnvData string `json:"flyenvData,omitempty"`
+	Enabled      bool   `json:"enabled,omitempty"`
+	Formula      string `json:"formula,omitempty"`
+	Installing   bool   `json:"installing,omitempty"`
+	DataSource   string `json:"dataSource,omitempty"`
+	Links        []Link `json:"links,omitempty"`
+	FlyEnvData   string `json:"flyenvData,omitempty"`
+	HasShell     bool   `json:"hasShell,omitempty"`
+	HasDatabases bool   `json:"hasDatabases,omitempty"`
 }
 
 func (m *Manager) Status() []ServiceStatus {
@@ -241,6 +243,9 @@ func (m *Manager) StartAll() error {
 		errs = append(errs, fmt.Errorf("caddy: %w", err))
 	}
 	errs = append(errs, m.startEnabledExtras())
+	if err := m.applyNginx(); err != nil {
+		errs = append(errs, fmt.Errorf("nginx: %w", err))
+	}
 
 	var adminCmds []string
 	hostsCmd, err := m.hostsSyncCmd()
@@ -292,6 +297,7 @@ func (m *Manager) LogFiles() map[string]string {
 		"login":     m.path("logs", "login.log"),
 		"dashboard": m.path("logs", "ui.log"),
 		"brew":      m.path("logs", "brew.log"),
+		"pecl":      m.path("logs", "pecl.log"),
 	}
 	for _, s := range extraServices() {
 		if s.Installed() {

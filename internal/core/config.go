@@ -18,7 +18,10 @@ type Site struct {
 	// PHP is a version key such as "8.2". Empty means a static site.
 	PHP   string `json:"php"`
 	HTTPS bool   `json:"https"`
-	// Extra is raw Caddyfile text added inside the site block.
+	// Server is "" for Caddy, or "nginx" for Nginx behind Caddy.
+	Server string `json:"server,omitempty"`
+	// Extra is raw text added inside the site block: Caddyfile text, or
+	// Nginx text for an Nginx site.
 	Extra string `json:"extra,omitempty"`
 }
 
@@ -147,6 +150,12 @@ func NormalizeSite(s Site) (Site, error) {
 		return s, errors.New("root folder must not contain quotes or new lines")
 	}
 	s.PHP = strings.TrimSpace(strings.TrimPrefix(s.PHP, "php"))
+	if s.Server = strings.ToLower(strings.TrimSpace(s.Server)); s.Server == "caddy" {
+		s.Server = ""
+	}
+	if s.Server != "" && s.Server != "nginx" {
+		return s, fmt.Errorf("web server %q is not known. Use caddy or nginx", s.Server)
+	}
 	return s, nil
 }
 

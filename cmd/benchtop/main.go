@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -33,9 +34,15 @@ Usage:
   benchtop stop [SERVICE]              Stop all, or one service
   benchtop restart SERVICE [--force]   Restart one service
   benchtop sites                       List sites
-  benchtop site add DOMAINS ROOT [--php 8.2] [--https]
+  benchtop site add DOMAINS ROOT [--php 8.2] [--https] [--server nginx]
   benchtop site rm ID|DOMAIN           Delete a site
-  benchtop php                         List installed PHP versions
+  benchtop versions                    List installed PHP versions
+  benchtop php [ARGS]                  Run the PHP of the site in this folder
+  benchtop composer [ARGS]             Run Composer with that PHP
+  benchtop which                       Show which PHP "benchtop php" uses here
+  benchtop ext list VERSION            List PECL extensions (for example: ext list 8.2)
+  benchtop ext install VERSION NAME    Install an extension with PECL (xdebug, redis, ...)
+  benchtop ext on|off VERSION NAME     Turn an installed extension on or off
   benchtop ftp users                   List FTP users
   benchtop ftp add USER DIR            Add an FTP user (asks for a password)
   benchtop ftp passwd USER             Change an FTP password
@@ -51,6 +58,8 @@ Usage:
   benchtop trust                       Trust the local HTTPS certificate
   benchtop logs NAME [-n 100]          Show a log (run "benchtop logs" for names)
   benchtop import-flyenv               Import sites and FTP users from FlyEnv
+  benchtop backup FILE                 Save sites, settings and FTP users to a file
+  benchtop restore FILE                Add the sites and FTP users from a backup
 
 --force stops another program that holds the port (for example FlyEnv).
 Data folder: ~/.benchtop (set BENCHTOP_HOME to change it).
@@ -74,6 +83,17 @@ func run(args []string) error {
 		return err
 	}
 	cmd, rest := args[0], args[1:]
+	if cmd == "dns-serve" {
+		// Internal: the wildcard DNS server that the "dns" service runs.
+		fs := flag.NewFlagSet("dns-serve", flag.ExitOnError)
+		port := fs.Int("port", 53535, "UDP port")
+		tld := fs.String("tld", "test", "comma-separated domain endings")
+		fs.Parse(rest)
+		return core.ServeDNS(*port, strings.Split(*tld, ","))
+	}
+	if cmd == "php" || cmd == "composer" {
+		runTool(m, cmd, rest) // does not return
+	}
 	switch cmd {
 	case "ui":
 		return cmdUI(m, rest)
@@ -114,11 +134,21 @@ func run(args []string) error {
 		return nil
 	case "site":
 		return cmdSite(m, rest)
-	case "php":
+	case "versions":
 		for _, v := range core.DiscoverPHP() {
 			fmt.Printf("%-5s %-9s %s\n", v.Key, v.Full, v.FPM)
 		}
 		return nil
+	case "which":
+		wd, _ := os.Getwd()
+		v, reason, err := m.PHPForDir(wd)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("PHP %s (%s): %s\n", v.Full, reason, filepath.Join(filepath.Dir(filepath.Dir(v.FPM)), "bin", "php"))
+		return nil
+	case "ext":
+		return cmdExt(m, rest)
 	case "ftp":
 		return cmdFTP(m, rest)
 	case "install":
@@ -138,6 +168,32 @@ func run(args []string) error {
 		return m.TrustCA()
 	case "logs":
 		return cmdLogs(m, rest)
+	case "backup":
+		if len(rest) != 1 {
+			return errors.New("use: benchtop backup FILE")
+		}
+		data, err := m.MakeBackup()
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(rest[0], data, 0o600); err != nil {
+			return err
+		}
+		fmt.Println("Saved", rest[0], "(no database data and no Keychain passwords)")
+		return nil
+	case "restore":
+		if len(rest) != 1 {
+			return errors.New("use: benchtop restore FILE")
+		}
+		data, err := os.ReadFile(rest[0])
+		if err != nil {
+			return err
+		}
+		report, err := m.RestoreBackup(data)
+		for _, line := range report {
+			fmt.Println(line)
+		}
+		return err
 	case "import-flyenv":
 		report, err := m.ImportFlyEnv(core.FlyEnvHome())
 		for _, line := range report {
@@ -168,7 +224,7 @@ func reorder(args []string) []string {
 
 func valueFlag(f string) bool {
 	switch strings.TrimLeft(f, "-") {
-	case "php", "port", "n", "extra":
+	case "php", "port", "n", "extra", "server":
 		return true
 	}
 	return false
@@ -224,6 +280,7 @@ func cmdSite(m *core.Manager, args []string) error {
 		fs := flag.NewFlagSet("site add", flag.ExitOnError)
 		php := fs.String("php", "", "PHP version, for example 8.2 (empty for static)")
 		https := fs.Bool("https", false, "serve with HTTPS")
+		server := fs.String("server", "", "web server: caddy (default) or nginx")
 		fs.Parse(reorder(args[1:]))
 		if fs.NArg() != 2 {
 			return errors.New("use: benchtop site add DOMAINS ROOT [--php 8.2] [--https]")
@@ -233,7 +290,7 @@ func cmdSite(m *core.Manager, args []string) error {
 			wd, _ := os.Getwd()
 			root = wd + "/" + root
 		}
-		s, warnings, err := m.SaveSite(core.Site{Domains: []string{fs.Arg(0)}, Root: root, PHP: *php, HTTPS: *https})
+		s, warnings, err := m.SaveSite(core.Site{Domains: []string{fs.Arg(0)}, Root: root, PHP: *php, HTTPS: *https, Server: *server})
 		if err != nil {
 			return err
 		}
@@ -427,4 +484,69 @@ func cmdDB(m *core.Manager, args []string) error {
 		return m.OpenShell(id)
 	}
 	return fmt.Errorf("unknown db command %q", sub)
+}
+
+// runTool runs PHP or Composer with the PHP version of the current folder,
+// and exits with its exit code. Arguments pass through as they are.
+func runTool(m *core.Manager, tool string, args []string) {
+	wd, _ := os.Getwd()
+	c, err := m.PHPCommand(wd, tool, args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	signal.Ignore(os.Interrupt) // the child gets Ctrl-C itself
+	if err := c.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			os.Exit(exit.ExitCode())
+		}
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func cmdExt(m *core.Manager, args []string) error {
+	if len(args) < 2 {
+		return errors.New("use: benchtop ext list|install|on|off VERSION [NAME]")
+	}
+	sub, key := args[0], args[1]
+	if sub == "list" {
+		list, err := m.ListPHPExtensions(key)
+		if err != nil {
+			return err
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "EXTENSION\tINSTALLED\tON\tNOTE")
+		yes := func(b bool) string {
+			if b {
+				return "yes"
+			}
+			return "-"
+		}
+		for _, e := range list.Extensions {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, yes(e.Installed), yes(e.Loaded), e.Note)
+		}
+		w.Flush()
+		fmt.Println("Loaded:", strings.Join(list.Loaded, " "))
+		return nil
+	}
+	if len(args) != 3 {
+		return fmt.Errorf("use: benchtop ext %s VERSION NAME", sub)
+	}
+	switch sub {
+	case "install":
+		if err := m.InstallPHPExtension(key, args[2]); err != nil {
+			return err
+		}
+		fmt.Println("Installing in the background. Follow it with: benchtop logs pecl")
+		return nil
+	case "on":
+		return m.SetPHPExtension(key, args[2], true)
+	case "off":
+		return m.SetPHPExtension(key, args[2], false)
+	}
+	return fmt.Errorf("unknown ext command %q", sub)
 }

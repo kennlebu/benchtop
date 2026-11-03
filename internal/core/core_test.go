@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseFlyEnvCaddy(t *testing.T) {
@@ -220,5 +221,72 @@ func TestTestHomeHasOwnSockets(t *testing.T) {
 	}
 	if !strings.HasPrefix(m.phpSocket("8.2"), "/tmp/benchtop-php82-") {
 		t.Fatalf("unexpected socket %s", m.phpSocket("8.2"))
+	}
+}
+
+func TestDNS(t *testing.T) {
+	ln, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.LocalAddr().(*net.UDPAddr).Port
+	ln.Close()
+	go ServeDNS(port, []string{"test", "backend"})
+	var ip net.IP
+	for i := 0; i < 20; i++ {
+		if ip, err = dnsQuery(port, "my-app.test"); err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if err != nil || !ip.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Fatalf("my-app.test: %v %v", ip, err)
+	}
+	if ip, err := dnsQuery(port, "api.gifms.backend"); err != nil || !ip.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Fatalf("api.gifms.backend: %v %v", ip, err)
+	}
+	if _, err := dnsQuery(port, "example.com"); err == nil {
+		t.Fatal("example.com must get no answer")
+	}
+}
+
+func TestNginxSite(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := m.Config()
+	cfg.Sites = []Site{
+		{ID: "a", Domains: []string{"a.test", "www.a.test"}, Root: "/srv/a/public", PHP: "8.2", Server: "nginx", Extra: "location /x { return 204; }"},
+		{ID: "b", Domains: []string{"b.test"}, Root: "/srv/b", PHP: "8.3"},
+	}
+	ng := m.renderNginx(cfg)
+	for _, want := range []string{"server_name a.test www.a.test;", `root "/srv/a/public";`, "fastcgi_pass unix:" + m.phpSocket("8.2"), "location /x { return 204; }"} {
+		if !strings.Contains(ng, want) {
+			t.Fatalf("nginx.conf lacks %q:\n%s", want, ng)
+		}
+	}
+	if strings.Contains(ng, "b.test") {
+		t.Fatal("a Caddy site must not be in nginx.conf")
+	}
+	cf := m.renderCaddyfile(cfg)
+	if !strings.Contains(cf, "reverse_proxy 127.0.0.1:8081") || strings.Contains(cf, "return 204") {
+		t.Fatalf("bad Caddyfile for an Nginx site:\n%s", cf)
+	}
+	if _, err := NormalizeSite(Site{Domains: []string{"c.test"}, Root: "/c", Server: "apache"}); err == nil {
+		t.Fatal("want an error for an unknown web server")
+	}
+}
+
+func TestExtensionIni(t *testing.T) {
+	if got := extensionIni("redis"); !strings.Contains(got, "\nextension=redis.so\n") {
+		t.Fatalf("redis ini: %s", got)
+	}
+	x := extensionIni("xdebug")
+	if !strings.Contains(x, "zend_extension=xdebug.so") || !strings.Contains(x, "xdebug.start_with_request=trigger") {
+		t.Fatalf("xdebug ini: %s", x)
+	}
+	if peclPackage("xdebug", "7.4") != "xdebug-3.1.6" || peclPackage("xdebug", "8.2") != "xdebug" {
+		t.Fatal("wrong xdebug release for the PHP version")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -162,8 +163,16 @@ func (m *Manager) importFlyEnvFTP(passwdPath string) ([]string, error) {
 			report = append(report, fmt.Sprintf("ftp user %s: already exists, skipped", parts[0]))
 			continue
 		}
-		lines = append(lines, line)
-		report = append(report, fmt.Sprintf("ftp user %s: imported (folder %s)", parts[0], strings.TrimSuffix(parts[5], "/./")))
+		// The files belong to the macOS user who runs Benchtop, which can
+		// have another ID on another Mac.
+		parts[2], parts[3] = strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid())
+		lines = append(lines, strings.Join(parts, ":"))
+		dir := strings.TrimSuffix(parts[5], "/./")
+		note := ""
+		if !exists(dir) {
+			note = ", but the folder does not exist yet"
+		}
+		report = append(report, fmt.Sprintf("ftp user %s: imported (folder %s%s)", parts[0], dir, note))
 	}
 	if len(lines) == 0 {
 		return report, nil

@@ -206,7 +206,7 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
         <div class="checks" id="loginChecks">
           <label class="check"><input type="checkbox" id="loginWeb" onchange="saveSettings()"> Caddy and the PHP versions that your sites use</label>
           <label class="check"><input type="checkbox" id="loginUI" onchange="saveSettings()"> This dashboard</label>
-          <label class="check"><input type="checkbox" id="loginExtras" onchange="saveSettings()"> Databases and Mailpit that were on last time</label>
+          <label class="check"><input type="checkbox" id="loginExtras" onchange="saveSettings()"> Databases, Mailpit and wildcard domains that were on last time</label>
           <label class="check"><input type="checkbox" id="loginFTP" onchange="saveSettings()"> FTP <small>(asks for your password at login)</small></label>
         </div>
       </div>
@@ -245,6 +245,16 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
           <button class="btn" data-act="trust">Trust the HTTPS certificate</button>
         </div>
       </div>
+
+      <div class="section">
+        <h2>Backup</h2>
+        <p>Save your sites, settings and FTP users to a file, for example to move to another Mac. The file has no database data and no passwords from the Keychain.</p>
+        <div class="tools">
+          <a class="btn" href="/api/backup" download>Save backup</a>
+          <button class="btn" onclick="$('#restoreFile').click()">Restore from file…</button>
+          <input type="file" id="restoreFile" accept=".json,application/json" hidden onchange="restoreBackup(this)">
+        </div>
+      </div>
     </section>
   </main>
 </div>
@@ -265,7 +275,12 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
     <details>
       <summary>Advanced</summary>
       <label class="check" style="margin-top:10px"><input type="checkbox" name="https"> Use HTTPS (Caddy local certificate)</label>
-      <label class="field" for="siteExtra">Extra Caddyfile directives</label>
+      <label class="field" for="siteServer">Web server</label>
+      <select id="siteServer" name="server" onchange="serverChanged()">
+        <option value="">Caddy</option>
+        <option value="nginx">Nginx (Caddy sends the requests to Nginx)</option>
+      </select>
+      <label class="field" for="siteExtra" id="extraLabel">Extra Caddyfile directives</label>
       <textarea id="siteExtra" name="extra" placeholder="header X-Debug 1"></textarea>
     </details>
     <div class="foot"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary">Save</button></div>
@@ -295,9 +310,19 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
   </form>
 </dialog>
 
+<dialog id="extDlg">
+  <div class="body">
+    <h3 id="extTitle">Extensions</h3>
+    <p class="note" style="margin:0 0 10px">Benchtop turns an extension on with its own file in conf.d, so your php.ini stays as it is. PHP-FPM restarts by itself.</p>
+    <div id="extList" class="list"></div>
+    <details><summary>Loaded extensions</summary><p class="note" id="extLoaded" style="word-break:break-word"></p></details>
+    <div class="foot"><button class="btn" onclick="go('logs','pecl'); this.closest('dialog').close()">PECL output</button><button class="btn primary" onclick="this.closest('dialog').close()">Done</button></div>
+  </div>
+</dialog>
+
 <dialog id="reportDlg">
   <div class="body">
-    <h3>Import report</h3>
+    <h3 id="reportTitle">Import report</h3>
     <pre class="log" id="reportText" style="height:auto;max-height:60vh;min-height:0"></pre>
     <div class="foot"><button class="btn primary" onclick="this.closest('dialog').close()">OK</button></div>
   </div>
@@ -367,12 +392,12 @@ function render(s) {
   state = s;
   const svcs = s.services.filter(x => x.installed && (
     x.kind === 'php' ? x.running || (x.usedBy || []).length :
-    isExtra(x) ? x.running || x.enabled : true));
+    isExtra(x) || x.kind === 'dns' || x.kind === 'nginx' ? x.running || x.enabled : true));
   const up = svcs.filter(x => x.running).length;
   $('#allDot').className = 'dot ' + (up === 0 ? '' : up === svcs.length ? 'ok' : 'warn');
   $('#allText').textContent = up === 0 ? 'All stopped' : up === svcs.length ? `All ${up} running` : `${up} of ${svcs.length} running`;
   $('#nSites').textContent = s.sites.length;
-  const web = s.services.filter(x => !isExtra(x));
+  const web = s.services.filter(x => !isExtra(x) && x.kind !== 'dns' && (x.kind !== 'nginx' || x.installed));
   $('#nServices').textContent = `${web.filter(x => x.running).length}/${web.length}`;
   const dbs = s.services.filter(x => x.kind === 'database' && x.installed);
   $('#nDB').textContent = dbs.length ? `${dbs.filter(x => x.running).length}/${dbs.length}` : '';
@@ -412,7 +437,7 @@ function renderSites() {
           <div class="name"><a href="${esc(e.url)}" target="_blank">${esc(s.domains[0])}</a>${s.https ? ' <span class="badge">HTTPS</span>' : ''}${s.domains.length > 1 ? ` <span class="badge" title="${esc(s.domains.slice(1).join(', '))}">+${s.domains.length - 1}</span>` : ''}</div>
           <div class="sub" title="${esc(s.root)}">${esc(s.root)}</div>
         </div>
-        <span class="badge">${s.php ? 'PHP ' + esc(s.php) : 'Static'}</span>
+        ${s.server === 'nginx' ? '<span class="badge">Nginx</span>' : ''}<span class="badge">${s.php ? 'PHP ' + esc(s.php) : 'Static'}</span>
         <a class="icon hide-sm" href="${esc(e.url)}" target="_blank" title="Open in browser" aria-label="Open ${esc(s.domains[0])} in browser">${ICONS.open}</a>
         <button class="icon" title="Show folder in Finder" aria-label="Show folder" onclick="openPath('finder', ${esc(JSON.stringify(s.root))})">${ICONS.folder}</button>
         <button class="icon" title="More" aria-label="More actions" onclick="siteMenu(event, '${esc(s.id)}')">${ICONS.more}</button>
@@ -469,7 +494,9 @@ function editSite(id) {
   phpOptions(f.php, s ? s.php : '');
   f.https.checked = s ? !!s.https : false;
   f.extra.value = s ? s.extra || '' : '';
-  f.querySelector('details').open = !!(s && (s.https || s.extra));
+  f.server.value = s ? s.server || '' : '';
+  serverChanged();
+  f.querySelector('details').open = !!(s && (s.https || s.extra || s.server));
   $('#rootNote').textContent = s ? '' : 'Choose the project folder. Benchtop suggests the rest.';
   $('#phpNote').textContent = '';
   $('#siteDlg').showModal();
@@ -494,13 +521,19 @@ async function suggest(path) {
   } catch (e) { $('#rootNote').textContent = e.message; }
 }
 
+function serverChanged() {
+  const nginx = $('#siteServer').value === 'nginx';
+  $('#extraLabel').textContent = nginx ? 'Extra Nginx directives (inside the server block)' : 'Extra Caddyfile directives';
+  $('#siteExtra').placeholder = nginx ? 'location /api { try_files $uri /index.php?$query_string; }' : 'header X-Debug 1';
+}
+
 async function saveSite(ev) {
   ev.preventDefault();
   const f = ev.target;
   await busy(f.querySelector('button.primary'), async () => {
     const r = await api('POST', '/api/sites', {
       id: f.id.value, domains: [f.domains.value], root: f.root.value,
-      php: f.php.value, https: f.https.checked, extra: f.extra.value,
+      php: f.php.value, https: f.https.checked, extra: f.extra.value, server: f.server.value,
     });
     $('#siteDlg').close();
     toast('Saved ' + r.site.domains[0]);
@@ -524,6 +557,7 @@ function renderServices() {
       <div class="actions">
         ${s.running
           ? `<button class="btn small" onclick="svc(this,'${s.id}','restart')">Restart</button><button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
+          : !s.installed && s.formula ? extraActions(s)
           : `<button class="btn small primary" ${s.installed ? '' : 'disabled'} onclick="svc(this,'${s.id}','start')">Start</button>`}
         <span class="spacer"></span>
         <button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="serviceMenu(event, '${s.id}')">${ICONS.more}</button>
@@ -534,9 +568,11 @@ function renderServices() {
 function serviceMenu(ev, id) {
   const s = state.services.find(x => x.id === id);
   const items = (s.files || []).map(f => ['Edit ' + f.label, () => { openPath('editor', f.path); if (f.note) toast(f.note); }]);
+  if (s.kind === 'php') items.unshift(['Extensions', () => openExtensions(id.slice(4))]);
   if (items.length) items.push(null);
   items.push(['Log', () => go('logs', id)]);
   if (id === 'caddy') items.push(['Start output', () => go('logs', 'caddy-run')]);
+  if (id === 'dns') items.unshift(['Change domain endings', () => changeTLDs()], null);
   showMenu(ev.currentTarget, items);
 }
 
@@ -553,7 +589,7 @@ function svc(btn, id, action) {
 
 // ---------- Databases and mail ----------
 const dbCache = {};
-const isDB = (s) => s.id.startsWith('mysql-') || s.id.startsWith('postgres-');
+const isDB = (s) => !!s.hasDatabases;
 
 async function loadDatabases(id, force) {
   const c = dbCache[id];
@@ -623,7 +659,7 @@ function extraMenu(ev, id) {
     items.push(['New user', () => newDBUser(id)]);
     items.push(['Set root password', () => rootPassword(id)]);
   }
-  if (isDB(s) || id === 'redis') items.push([id === 'redis' ? 'Open redis-cli' : 'Open shell', () => busy(null, () => api('POST', `/api/db/${id}/shell`))]);
+  if (s.hasShell && s.running) items.push([id === 'redis' ? 'Open redis-cli' : 'Open shell', () => busy(null, () => api('POST', `/api/db/${id}/shell`))]);
   if (items.length) items.push(null);
   for (const f of s.files || []) items.push(['Edit ' + f.label, () => { openPath('editor', f.path); if (f.note) toast(f.note); }]);
   items.push(['Change port', () => changePort(id)]);
@@ -698,6 +734,18 @@ async function rootPassword(id) {
   busy(null, async () => { await api('POST', `/api/db/${id}/root-password`, v); toast('Saved the root password'); loadDatabases(id, true); });
 }
 
+async function changeTLDs() {
+  const s = state.services.find(x => x.id === 'dns');
+  const current = (s.detail.match(/\*\.[a-z0-9-]+/g) || []).map(x => x.slice(2)).join(', ');
+  const v = await ask('Domain endings', [{name: 'tlds', label: 'Endings', value: current, hint: 'Comma separated, for example: test, backend'}],
+    {note: 'Every name with one of these endings goes to this Mac. Stop wildcard domains first.', submit: 'Save'});
+  if (!v) return;
+  busy(null, async () => {
+    await api('PUT', '/api/services/dns/settings', {domains: v.tlds.split(',').map(x => x.trim()).filter(Boolean)});
+    toast('Saved. Start wildcard domains to use them.');
+  });
+}
+
 async function changePort(id) {
   const s = state.services.find(x => x.id === id);
   const port = (s.detail.match(/port (\d+)/) || [])[1] || '';
@@ -717,6 +765,50 @@ function useFlyEnv(id, on) {
     await api('PUT', `/api/services/${id}/settings`, on ? {dataDir: s.flyenvData, source: 'flyenv'} : {dataDir: '', source: ''});
     delete dbCache[id];
     toast(on ? 'Now uses the FlyEnv data. Start it, then set the root password.' : 'Now uses the Benchtop data folder.');
+  });
+}
+
+// ---------- PHP extensions ----------
+let extVersion = null, extTimer = null;
+async function openExtensions(version) {
+  extVersion = version;
+  $('#extTitle').textContent = `PHP ${version} extensions`;
+  $('#extList').innerHTML = '<div class="empty">Loading…</div>';
+  $('#extDlg').showModal();
+  await loadExtensions();
+}
+$('#extDlg').addEventListener('close', () => { clearTimeout(extTimer); extVersion = null; });
+
+async function loadExtensions() {
+  clearTimeout(extTimer);
+  if (!extVersion) return;
+  let r;
+  try { r = await api('GET', `/api/php/${extVersion}/extensions`); }
+  catch (e) { $('#extList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  $('#extLoaded').textContent = r.loaded.join(', ');
+  $('#extList').innerHTML = r.extensions.map(x => {
+    let state = x.loaded ? 'On' : x.installed ? 'Off' : 'Not installed';
+    let action = '';
+    if (r.installing === x.name) { state = 'Installing…'; }
+    else if (x.loaded && x.enabled) action = `<button class="btn small" onclick="extAction(this,'${x.name}','off')">Turn off</button>`;
+    else if (x.loaded) action = '<span class="note" style="margin:0">On in php.ini</span>';
+    else if (x.installed) action = `<button class="btn small primary" onclick="extAction(this,'${x.name}','on')">Turn on</button>`;
+    else if (!r.installing) action = `<button class="btn small" onclick="extAction(this,'${x.name}','install')">Install</button>`;
+    return `<div class="item"><div class="item-main">
+      <span class="dot ${x.loaded ? 'ok' : ''}"></span>
+      <div class="item-title"><div class="name">${esc(x.name)}</div>${x.note ? `<div class="note" style="margin:0">${esc(x.note)}</div>` : ''}</div>
+      <span class="badge">${esc(state)}</span>${action}
+    </div></div>`;
+  }).join('');
+  if (r.installing) extTimer = setTimeout(loadExtensions, 2000);
+}
+
+function extAction(btn, name, action) {
+  busy(btn, async () => {
+    await api('POST', `/api/php/${extVersion}/extensions/${name}/${action}`);
+    if (action === 'install') toast(`Installing ${name} with PECL. This can take some minutes.`, '', [['View output', () => { $('#extDlg').close(); go('logs', 'pecl'); }]]);
+    else toast(`${name} is ${action === 'on' ? 'on' : 'off'} for PHP ${extVersion}`);
+    await loadExtensions();
   });
 }
 
@@ -771,7 +863,7 @@ async function loadLogList(select) {
     if (n.startsWith('site-')) { const e = state && state.sites.find(x => x.site.id === n.slice(5)); return (e ? e.site.domains[0] : n.slice(5)) + ' (access)'; }
     const svc = state && state.services.find(x => x.id === n);
     if (svc && isExtra(svc)) return svc.name;
-    return {caddy: 'Caddy', 'caddy-run': 'Caddy start output', ftp: 'FTP transfers', login: 'Start at login', dashboard: 'Dashboard', brew: 'Homebrew installs'}[n] || n.replace('php-', 'PHP-FPM ');
+    return {caddy: 'Caddy', 'caddy-run': 'Caddy start output', ftp: 'FTP transfers', login: 'Start at login', dashboard: 'Dashboard', brew: 'Homebrew installs', pecl: 'PECL installs', dns: 'Wildcard domains'}[n] || n.replace('php-', 'PHP-FPM ');
   };
   sel.innerHTML = r.logs.map(n => `<option value="${esc(n)}">${esc(label(n))}</option>`).join('');
   const pick = select || currentLog || 'caddy';
@@ -859,6 +951,20 @@ function saveSettings(ev) {
   });
 }
 
+function restoreBackup(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  busy(null, async () => {
+    const res = await fetch('/api/restore', {method: 'POST', headers: {'X-Benchtop': '1'}, body: await file.text()});
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.error || 'Restore failed');
+    $('#reportTitle').textContent = 'Restore report';
+    $('#reportText').textContent = r.report.join('\n');
+    $('#reportDlg').showModal();
+  });
+}
+
 // ---------- Shared ----------
 function openPath(what, path) { busy(null, () => api('POST', '/api/open', {what, path})); }
 
@@ -925,7 +1031,7 @@ const actions = {
   'trust': () => api('POST', '/api/trust').then(() => toast('Certificate trusted. Restart your browser.')),
   'import': () => {
     if (!confirm('Import Caddy sites and FTP users from FlyEnv? Benchtop skips items that already exist.')) return;
-    return api('POST', '/api/import-flyenv').then(r => { $('#reportText').textContent = r.report.join('\n'); $('#reportDlg').showModal(); });
+    return api('POST', '/api/import-flyenv').then(r => { $('#reportTitle').textContent = 'Import report'; $('#reportText').textContent = r.report.join('\n'); $('#reportDlg').showModal(); });
   },
 };
 document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => busy(b, actions[b.dataset.act])));

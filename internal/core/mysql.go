@@ -32,9 +32,12 @@ func sqlString(s string) string {
 	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }
 
+// mysqlService runs MySQL, or MariaDB when maria is true. The two are
+// close: they differ in binary names, the data folder setup and one option.
 type mysqlService struct {
-	key     string // "8.4"
-	formula string // "mysql@8.4"
+	key     string // "8.4"; empty for MariaDB
+	formula string // "mysql@8.4" or "mariadb"
+	maria   bool
 }
 
 func mysqlServices() []extraService {
@@ -45,15 +48,41 @@ func mysqlServices() []extraService {
 			out = append(out, &mysqlService{key: fmt.Sprintf("%d.%d", pv[0], pv[1]), formula: "mysql"})
 		}
 	}
-	return out
+	return append(out, &mysqlService{formula: "mariadb", maria: true})
 }
 
-func (s *mysqlService) ID() string      { return "mysql-" + s.key }
-func (s *mysqlService) Name() string    { return "MySQL " + s.key }
+func (s *mysqlService) ID() string {
+	if s.maria {
+		return "mariadb"
+	}
+	return "mysql-" + s.key
+}
+
+func (s *mysqlService) Name() string {
+	if s.maria {
+		return "MariaDB"
+	}
+	return "MySQL " + s.key
+}
+
+// server and client are the binary names.
+func (s *mysqlService) server() string {
+	if s.maria {
+		return "mariadbd"
+	}
+	return "mysqld"
+}
+
+func (s *mysqlService) client() string {
+	if s.maria {
+		return "mariadb"
+	}
+	return "mysql"
+}
 func (s *mysqlService) Kind() string    { return "database" }
 func (s *mysqlService) Formula() string { return s.formula }
 func (s *mysqlService) Installed() bool {
-	return exists(filepath.Join(brewPrefix(s.formula), "bin", "mysqld"))
+	return exists(filepath.Join(brewPrefix(s.formula), "bin", s.server()))
 }
 func (s *mysqlService) Version() string  { return brewVersion(s.formula) }
 func (s *mysqlService) DefaultPort() int { return 3306 }
@@ -77,7 +106,7 @@ func (m *Manager) tmpName(base string) string {
 }
 
 func (s *mysqlService) socket(m *Manager) string {
-	return "/tmp/" + m.tmpName("benchtop-mysql"+strings.ReplaceAll(s.key, ".", "")) + ".sock"
+	return "/tmp/" + m.tmpName("benchtop-"+strings.ReplaceAll(s.ID(), ".", "")) + ".sock"
 }
 
 func (s *mysqlService) dataDir(m *Manager) string {
@@ -88,6 +117,9 @@ func (s *mysqlService) dataDir(m *Manager) string {
 }
 
 func (s *mysqlService) flyenvDataDir() string {
+	if s.maria {
+		return ""
+	}
 	d := filepath.Join(FlyEnvHome(), "mysql", "data-"+s.key)
 	if exists(filepath.Join(d, "mysql")) {
 		return d
@@ -118,14 +150,14 @@ port = %d
 bind-address = 127.0.0.1
 socket = %s
 pid-file = %s
-mysqlx = OFF
+%s
 
 [client]
 port = %d
 socket = %s
 
 !include %s
-`, data, port, s.socket(m), filepath.Join(m.extraDir(s), "mysqld.pid"), port, s.socket(m), s.custom(m))
+`, data, port, s.socket(m), filepath.Join(m.extraDir(s), "mysqld.pid"), s.extraOption(), port, s.socket(m), s.custom(m))
 	if err := os.WriteFile(s.cnf(m), []byte(cnf), 0o644); err != nil {
 		return err
 	}
@@ -139,7 +171,13 @@ socket = %s
 	if err := os.MkdirAll(filepath.Dir(data), 0o755); err != nil {
 		return err
 	}
-	out, err := exec.Command(s.bin("mysqld"), "--defaults-file="+s.cnf(m), "--initialize-insecure").CombinedOutput()
+	init := exec.Command(s.bin("mysqld"), "--defaults-file="+s.cnf(m), "--initialize-insecure")
+	if s.maria {
+		// "normal" gives root a password login, like MySQL, instead of a login
+		// by macOS user name.
+		init = exec.Command(s.bin("mariadb-install-db"), "--defaults-file="+s.cnf(m), "--auth-root-authentication-method=normal")
+	}
+	out, err := init.CombinedOutput()
 	appendLog(m.extraLog(s.ID()), "initialize data folder", out)
 	if err != nil {
 		return fmt.Errorf("could not make the data folder: %s", lastLines(strings.TrimSpace(string(out)), 8))
@@ -180,7 +218,7 @@ func checkDataDirFree(dir string) error {
 }
 
 func (s *mysqlService) command(m *Manager) (string, []string) {
-	return s.bin("mysqld"), []string{"--defaults-file=" + s.cnf(m)}
+	return s.bin(s.server()), []string{"--defaults-file=" + s.cnf(m)}
 }
 
 func (s *mysqlService) ready(m *Manager) bool {
@@ -221,7 +259,7 @@ func (s *mysqlService) query(m *Manager, password, sql string) (string, error) {
 		return "", err
 	}
 	defer os.Remove(creds)
-	cmd := exec.Command(s.bin("mysql"), "--defaults-extra-file="+creds, "--batch", "--skip-column-names")
+	cmd := exec.Command(s.bin(s.client()), "--defaults-extra-file="+creds, "--batch", "--skip-column-names")
 	cmd.Stdin = strings.NewReader(sql)
 	out, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(out))
@@ -278,7 +316,7 @@ func (s *mysqlService) shell(m *Manager) error {
 	if err := os.WriteFile(creds, []byte(content), 0o600); err != nil {
 		return err
 	}
-	return m.openInTerminal(s.ID()+"-shell", s.bin("mysql"), "--defaults-extra-file="+creds)
+	return m.openInTerminal(s.ID()+"-shell", s.bin(s.client()), "--defaults-extra-file="+creds)
 }
 
 func (s *mysqlService) detail(m *Manager) string {
@@ -302,4 +340,12 @@ func (s *mysqlService) links(m *Manager) []Link { return nil }
 func (s *mysqlService) env(m *Manager) string {
 	pw, _ := m.loadPassword(s.ID(), s.account(m))
 	return fmt.Sprintf("DB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=%d\nDB_DATABASE=\nDB_USERNAME=root\nDB_PASSWORD=%s\n", m.servicePortOrDefault(s), pw)
+}
+
+// extraOption turns off the MySQL X plugin, which MariaDB does not have.
+func (s *mysqlService) extraOption() string {
+	if s.maria {
+		return ""
+	}
+	return "mysqlx = OFF"
 }

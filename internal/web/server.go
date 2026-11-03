@@ -50,6 +50,39 @@ func Handler(m *core.Manager) http.Handler {
 		report, err := s.m.ImportFlyEnv(core.FlyEnvHome())
 		return map[string]any{"report": report}, err
 	}))
+	mux.HandleFunc("GET /api/php/{version}/extensions", s.wrap(func(r *http.Request) (any, error) {
+		return s.m.ListPHPExtensions(r.PathValue("version"))
+	}))
+	mux.HandleFunc("POST /api/php/{version}/extensions/{name}/{action}", s.wrap(func(r *http.Request) (any, error) {
+		v, name := r.PathValue("version"), r.PathValue("name")
+		switch r.PathValue("action") {
+		case "install":
+			return nil, s.m.InstallPHPExtension(v, name)
+		case "on":
+			return nil, s.m.SetPHPExtension(v, name, true)
+		case "off":
+			return nil, s.m.SetPHPExtension(v, name, false)
+		}
+		return nil, errors.New("unknown action")
+	}))
+	mux.HandleFunc("GET /api/backup", func(w http.ResponseWriter, r *http.Request) {
+		data, err := s.m.MakeBackup()
+		if err != nil {
+			reply(w, nil, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="benchtop-backup-%s.json"`, time.Now().Format("2006-01-02")))
+		w.Write(data)
+	})
+	mux.HandleFunc("POST /api/restore", s.wrap(func(r *http.Request) (any, error) {
+		data, err := io.ReadAll(io.LimitReader(r.Body, 10<<20))
+		if err != nil {
+			return nil, err
+		}
+		report, err := s.m.RestoreBackup(data)
+		return map[string]any{"report": report}, err
+	}))
 	mux.HandleFunc("PUT /api/settings", s.wrap(func(r *http.Request) (any, error) {
 		var in core.Settings
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {

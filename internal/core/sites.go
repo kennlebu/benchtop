@@ -129,6 +129,9 @@ func (m *Manager) applySites() []string {
 	} else if err := m.writeCaddyfile(); err != nil {
 		warnings = append(warnings, err.Error())
 	}
+	if err := m.applyNginx(); err != nil {
+		warnings = append(warnings, "nginx: "+err.Error())
+	}
 	if err := m.syncHosts(); err != nil {
 		warnings = append(warnings, "hosts: "+err.Error())
 	}
@@ -179,7 +182,7 @@ func (m *Manager) hostsDomains() []string {
 	seen := map[string]bool{}
 	for _, s := range m.Config().Sites {
 		for _, d := range s.Domains {
-			if strings.HasPrefix(d, "*.") || d == "localhost" || strings.HasSuffix(d, ".localhost") || seen[d] {
+			if strings.HasPrefix(d, "*.") || d == "localhost" || strings.HasSuffix(d, ".localhost") || seen[d] || m.wildcardCovers(d) {
 				continue
 			}
 			seen[d] = true

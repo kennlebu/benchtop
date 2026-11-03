@@ -156,6 +156,9 @@ func (m *Manager) StartAtLogin() error {
 		if err := m.startCaddy(false); err != nil {
 			errs = append(errs, fmt.Errorf("caddy: %w", err))
 		}
+		if err := m.applyNginx(); err != nil {
+			errs = append(errs, fmt.Errorf("nginx: %w", err))
+		}
 		if cmd, err := m.hostsSyncCmd(); err != nil {
 			errs = append(errs, fmt.Errorf("hosts: %w", err))
 		} else if cmd != "" {

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.4.0 (unreleased)
+
+### Added
+
+- PHP extensions: an "Extensions" dialog on each PHP card, and
+  `benchtop ext list|install|on|off`. PECL installs in the background.
+  Benchtop turns extensions on with its own file in `conf.d` and does not
+  change `php.ini`. Xdebug starts only on a trigger, so normal requests
+  stay fast.
+- Per-site PHP: `benchtop php`, `benchtop composer` and `benchtop which`.
+  `benchtop versions` now lists the PHP versions (it was `benchtop php`).
+- Nginx as the web server of a site, behind Caddy. `benchtop site add ... --server nginx`.
+- MariaDB, Memcached and MongoDB. Redis, Memcached, MongoDB and Mailpit
+  now come from data-only definitions (RFC 0001, section 7.3).
+- Wildcard domains: a small DNS server in Benchtop, with `/etc/resolver` files.
+- Backup and restore: `benchtop backup|restore FILE` and Settings → Backup.
+  FTP users get the user ID of this Mac.
+
 ## v0.3.0 (unreleased)
 
 ### Added

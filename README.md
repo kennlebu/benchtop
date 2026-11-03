@@ -2,7 +2,8 @@
 
 A small local development environment manager for macOS. It runs
 **Caddy**, **PHP-FPM** (many versions at the same time), **Pure-FTPd**,
-**MySQL**, **PostgreSQL**, **Redis** and **Mailpit** from Homebrew. It is a lightweight alternative to FlyEnv, for the services
+**Nginx**, **MySQL**, **MariaDB**, **PostgreSQL**, **Redis**, **Memcached**,
+**MongoDB** and **Mailpit** from Homebrew. It is a lightweight alternative to FlyEnv, for the services
 I use every day.
 
 It is one Go binary with no dependencies. It has a command line and a
@@ -34,6 +35,10 @@ benchtop install redis     # install a service with Homebrew
 benchtop start mysql-8.4
 benchtop db create mysql-8.4 myapp
 benchtop db env mysql-8.4  # .env lines for Laravel
+benchtop php artisan migrate   # the PHP version of the site in this folder
+benchtop composer install
+benchtop ext install 8.2 xdebug
+benchtop backup ~/benchtop-backup.json
 benchtop help              # all commands
 ```
 
@@ -46,7 +51,9 @@ When you stop the dashboard or the terminal, the services keep running.
   suggests the root (`public/`), the domain and the PHP version from
   `composer.json`.
 - **Services**: start, stop and restart each service. Open `php.ini`,
-  `php-fpm.conf` and other config files from the "⋯" menu.
+  `php-fpm.conf` and other config files from the "⋯" menu. "Extensions"
+  on a PHP card installs PECL extensions (Xdebug, Redis, APCu, ...) and
+  turns them on or off.
 - **Databases**: MySQL, PostgreSQL and Redis. Create databases and users,
   copy the `.env` lines, open a shell. A service that is not installed has
   an "Install with Homebrew" button.
@@ -106,6 +113,39 @@ The dashboard listens on 127.0.0.1 only. It refuses requests with another
 `Host` header, and write requests need an `X-Benchtop` header, so other
 web sites cannot control it.
 
+## Per-site PHP on the command line
+
+`benchtop php` and `benchtop composer` use the PHP version of the site
+that holds the current folder. Then `composer`, `artisan` and the web server
+use the same version. With no site, Benchtop reads `composer.json`, and then
+uses the newest PHP. `benchtop which` shows the choice. You can add aliases:
+
+```bash
+alias php="benchtop php"
+alias composer="benchtop composer"
+```
+
+## Nginx
+
+A site can use Nginx instead of Caddy (site form → Advanced → Web server).
+Caddy keeps ports 80 and 443 and sends the requests for that site to Nginx on
+`127.0.0.1:8081`. For an Nginx site, the "Extra" field holds Nginx text, for
+example `location` blocks.
+
+## Wildcard domains
+
+"Wildcard domains" on the Services page runs a small DNS server in Benchtop.
+It answers `127.0.0.1` for every name that ends in `.test` (or the endings
+that you choose). The first start writes `/etc/resolver/test` with your
+password. After that, new sites under those endings need no `/etc/hosts`
+change and no password. Stop it to remove the resolver files.
+
+## Backup
+
+`benchtop backup FILE` (or Settings → Backup) saves the sites, the settings
+and the FTP users. `benchtop restore FILE` adds them on another Mac. The file
+has no database data and no Keychain passwords.
+
 ## HTTPS
 
 Turn on HTTPS for a site, start Caddy, then run `benchtop trust` one time
@@ -115,9 +155,9 @@ to add the Benchtop local CA to the system keychain.
 
 See [RFC 0001: Benchtop roadmap](docs/rfcs/0001-roadmap.md). In short:
 
-1. v0.2: optional start at login, smart "Add site", live logs, new layout
-2. v0.3: MySQL, Redis, PostgreSQL, Mailpit
-3. v0.4: PHP extensions, Nginx, more FlyEnv services
+1. v0.2: optional start at login, smart "Add site", live logs, new layout (done)
+2. v0.3: MySQL, Redis, PostgreSQL, Mailpit (done)
+3. v0.4: PHP extensions, Nginx, more FlyEnv services (done)
 4. v1.0: Homebrew tap, open-source release
 5. Later: native app
 

@@ -77,6 +77,9 @@ func (m *Manager) OpenShell(id string) error {
 		return fmt.Errorf("unknown service %q", id)
 	}
 	sh, ok := s.(interface{ shell(*Manager) error })
+	if simple, isSimple := s.(*simpleService); isSimple && !simple.hasShell() {
+		ok = false
+	}
 	if !ok {
 		return fmt.Errorf("%s has no shell", s.Name())
 	}

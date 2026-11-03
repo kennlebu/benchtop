@@ -23,6 +23,8 @@ type ServiceSettings struct {
 	DataDir string `json:"dataDir,omitempty"`
 	// Source is "flyenv" when DataDir is a FlyEnv data folder.
 	Source string `json:"source,omitempty"`
+	// Domains are the domain endings for the wildcard DNS, for example "test".
+	Domains []string `json:"domains,omitempty"`
 }
 
 // Link is a URL that a service card can open, for example the Mailpit inbox.
@@ -58,7 +60,8 @@ func extraServices() []extraService {
 	var out []extraService
 	out = append(out, mysqlServices()...)
 	out = append(out, postgresServices()...)
-	out = append(out, &redisService{}, &mailpitService{})
+	out = append(out, simpleServices()...)
+	out = append(out, &dnsService{}, &nginxService{})
 	return out
 }
 
@@ -192,6 +195,11 @@ func (m *Manager) stopExtra(s extraService, remember bool) error {
 		}
 	}
 	os.Remove(m.extraPIDFile(s.ID()))
+	if hook, ok := s.(interface{ afterStop(*Manager, bool) error }); ok {
+		if err := hook.afterStop(m, remember); err != nil {
+			return err
+		}
+	}
 	if !remember {
 		return nil
 	}
@@ -238,11 +246,17 @@ func (m *Manager) extraStatus() []ServiceStatus {
 			ID: s.ID(), Name: s.Name(), Kind: s.Kind(), Version: s.Version(), Installed: s.Installed(),
 			Running: running, PID: pid, Enabled: st.Enabled, Formula: s.Formula(),
 			Installing: m.isInstalling(s.Formula()), DataSource: st.Source,
+			Admin: s.ID() == "dns", // the first start writes /etc/resolver
 		}
 		if status.Installed {
 			status.Detail = s.detail(m)
 			status.Links = s.links(m)
 			status.FlyEnvData = FlyEnvData(s.ID())
+			_, status.HasDatabases = s.(databaseService)
+			status.HasShell = status.HasDatabases
+			if simple, ok := s.(*simpleService); ok {
+				status.HasShell = simple.hasShell()
+			}
 		}
 		out = append(out, status)
 	}
@@ -281,9 +295,10 @@ func hideOldUninstalled(list []ServiceStatus) []ServiceStatus {
 
 // ServiceSettingsUpdate changes the port or the data folder of an extra service.
 type ServiceSettingsUpdate struct {
-	Port    *int    `json:"port,omitempty"`
-	DataDir *string `json:"dataDir,omitempty"`
-	Source  *string `json:"source,omitempty"`
+	Domains []string `json:"domains,omitempty"`
+	Port    *int     `json:"port,omitempty"`
+	DataDir *string  `json:"dataDir,omitempty"`
+	Source  *string  `json:"source,omitempty"`
 }
 
 func (m *Manager) UpdateServiceSettings(id string, u ServiceSettingsUpdate) error {
@@ -295,6 +310,16 @@ func (m *Manager) UpdateServiceSettings(id string, u ServiceSettingsUpdate) erro
 	}
 	if _, running := m.extraRunning(id); running && u.DataDir != nil {
 		return fmt.Errorf("stop %s before you change its data folder", s.Name())
+	}
+	for i, d := range u.Domains {
+		d = strings.Trim(strings.ToLower(strings.TrimSpace(d)), ".")
+		if !domainRe.MatchString(d) || strings.Contains(d, ".") {
+			return fmt.Errorf("%q is not a domain ending. Use one word, for example test", d)
+		}
+		u.Domains[i] = d
+	}
+	if _, running := m.extraRunning(id); running && u.Domains != nil {
+		return fmt.Errorf("stop %s before you change the domain endings", s.Name())
 	}
 	if u.Port != nil && (*u.Port < 1 || *u.Port > 65535) {
 		return fmt.Errorf("port %d is not valid", *u.Port)
@@ -311,6 +336,9 @@ func (m *Manager) UpdateServiceSettings(id string, u ServiceSettingsUpdate) erro
 		}
 		if u.Source != nil {
 			st.Source = *u.Source
+		}
+		if u.Domains != nil {
+			st.Domains = u.Domains
 		}
 	})
 }

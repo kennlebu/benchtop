@@ -27,6 +27,14 @@ func (m *Manager) SiteHealth(s Site, running map[string]bool) []SiteHint {
 	if st, err := os.Stat(s.Root); err != nil || !st.IsDir() {
 		return []SiteHint{{Level: "error", Message: "The root folder does not exist."}}
 	}
+	if s.Server == "nginx" {
+		if !(&nginxService{}).Installed() {
+			hints = append(hints, SiteHint{Level: "error", Message: "This site uses Nginx, but Nginx is not installed. Install it on the Services page."})
+		} else if _, up := m.extraRunning("nginx"); running["caddy"] && !up {
+			hints = append(hints, SiteHint{Level: "error", Message: "Nginx is stopped, so this site gives a 502 error.",
+				Fix: &SiteFix{Label: "Start Nginx", Action: "start", Value: "nginx"}})
+		}
+	}
 	if s.PHP != "" {
 		id := "php-" + s.PHP
 		if _, ok := findPHP(s.PHP); !ok {

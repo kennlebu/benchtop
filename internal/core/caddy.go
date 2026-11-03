@@ -78,13 +78,18 @@ func (m *Manager) renderCaddyfile(cfg Config) string {
 		if s.HTTPS {
 			b.WriteString("\ttls internal\n")
 		}
-		fmt.Fprintf(&b, "\troot * %q\n", s.Root)
-		b.WriteString("\tencode zstd gzip\n")
-		if s.PHP != "" {
-			fmt.Fprintf(&b, "\tphp_fastcgi unix/%s\n", m.phpSocket(s.PHP))
+		if s.Server == "nginx" {
+			// Nginx serves this site. Its Extra text goes to Nginx, not here.
+			fmt.Fprintf(&b, "\treverse_proxy 127.0.0.1:%d\n", m.servicePortOrDefault(&nginxService{}))
+		} else {
+			fmt.Fprintf(&b, "\troot * %q\n", s.Root)
+			b.WriteString("\tencode zstd gzip\n")
+			if s.PHP != "" {
+				fmt.Fprintf(&b, "\tphp_fastcgi unix/%s\n", m.phpSocket(s.PHP))
+			}
+			b.WriteString("\tfile_server\n")
 		}
-		b.WriteString("\tfile_server\n")
-		if extra := strings.TrimSpace(s.Extra); extra != "" {
+		if extra := strings.TrimSpace(s.Extra); extra != "" && s.Server != "nginx" {
 			for _, line := range strings.Split(extra, "\n") {
 				b.WriteString("\t" + strings.TrimRight(line, " \t") + "\n")
 			}
