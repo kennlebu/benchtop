@@ -37,7 +37,10 @@
   which` shows the choice.
 - More services: Valkey, Meilisearch, Typesense and SeaweedFS (S3
   storage, with a `local` bucket). Each card has "Copy .env" with the
-  Laravel settings. Typesense comes from the `typesense/tap` tap.
+  Laravel settings. Typesense comes from the `typesense/tap` tap, which
+  Homebrew must trust first (`brew trust typesense/tap`).
+- A failed install shows the reason on the card and in the command line,
+  for example the `brew trust` command for a tap that is not trusted.
 - A site hint when a domain is not in `/etc/hosts`, with a "Sync
   /etc/hosts" button. A new parked folder never opens a password dialog
   by itself.

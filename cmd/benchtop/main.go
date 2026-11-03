@@ -200,6 +200,11 @@ func run(args []string) error {
 		}
 		fmt.Println("Installing. The output is in: benchtop logs brew")
 		m.WaitInstalls()
+		for _, s := range m.Status() {
+			if s.ID == rest[0] && s.InstallError != "" {
+				return errors.New(s.InstallError)
+			}
+		}
 		return nil
 	case "upgrade":
 		if len(rest) != 1 {

@@ -256,7 +256,7 @@ func (m *Manager) extraStatus() []ServiceStatus {
 		status := ServiceStatus{
 			ID: s.ID(), Name: s.Name(), Kind: s.Kind(), Version: s.Version(), Installed: s.Installed(),
 			Running: running, PID: pid, Enabled: st.Enabled, Formula: s.Formula(),
-			Installing: m.isInstalling(s.Formula()), DataSource: st.Source,
+			Installing: m.isInstalling(s.Formula()), DataSource: st.Source, InstallError: m.InstallError(s.Formula()),
 			Admin: s.ID() == "dns", // the first start writes /etc/resolver
 		}
 		if status.Installed {

@@ -35,10 +35,21 @@ type simpleService struct {
 }
 
 func (s *simpleService) prefix() string {
+	name := s.formula
 	if s.prefixName != "" {
-		return brewPrefix(s.prefixName)
+		name = s.prefixName
 	}
-	return brewPrefix(s.formula)
+	if p := brewPrefix(name); p != "" {
+		return p
+	}
+	// A tap formula can install a versioned formula, for example
+	// typesense-server@30.2 for typesense-server.
+	for _, opt := range []string{"/opt/homebrew/opt", "/usr/local/opt"} {
+		if dirs, _ := filepath.Glob(filepath.Join(opt, name+"@*")); len(dirs) > 0 {
+			return dirs[len(dirs)-1]
+		}
+	}
+	return ""
 }
 
 func (s *simpleService) ID() string       { return s.id }
@@ -50,10 +61,10 @@ func (s *simpleService) Installed() bool {
 	return s.prefix() != "" && exists(filepath.Join(s.prefix(), s.binary))
 }
 func (s *simpleService) Version() string {
-	if s.prefixName != "" {
-		return brewVersion(s.prefixName)
+	if p := s.prefix(); p != "" {
+		return brewVersion(filepath.Base(p))
 	}
-	return brewVersion(s.formula)
+	return ""
 }
 
 func (s *simpleService) prepare(m *Manager) error {
@@ -191,7 +202,9 @@ func simpleServices() []extraService {
 				os.MkdirAll(data, 0o755)
 				return []string{"server", "-dir", data, "-ip", "127.0.0.1", "-ip.bind", "127.0.0.1",
 					"-master.port", fmt.Sprint(port + 1), "-volume.port", fmt.Sprint(port + 2),
-					"-filer", "-filer.port", fmt.Sprint(port + 3), "-s3", "-s3.port", fmt.Sprint(port)}
+					"-filer", "-filer.port", fmt.Sprint(port + 3), "-s3", "-s3.port", fmt.Sprint(port),
+					// No Iceberg and Lance servers: they would take ports 8181 and 9101.
+					"-s3.port.iceberg", "0", "-s3.port.lance", "0"}
 			},
 			detailText: func(port int) string {
 				return fmt.Sprintf("S3 port %d, bucket \"local\"", port)

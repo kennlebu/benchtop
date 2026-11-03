@@ -126,6 +126,8 @@ type ServiceStatus struct {
 	// Update is a newer version from Homebrew, for the Upgrade button.
 	Update    string `json:"update,omitempty"`
 	Upgrading bool   `json:"upgrading,omitempty"`
+	// InstallError says why the last install failed.
+	InstallError string `json:"installError,omitempty"`
 }
 
 func (m *Manager) Status() []ServiceStatus {

@@ -703,8 +703,16 @@ function cardName(s) {
 }
 
 function extraMeta(s) {
-  if (!s.installed && (s.choices || []).length > 1) return 'Not installed. Choose a version.';
-  if (!s.installed) return `Not installed. Homebrew formula: ${esc(s.formula)}`;
+  const failed = s.installError ? `<br><span class="danger-text">${esc(s.installError)}</span>` : '';
+  if (!s.installed) return extraMetaMissing(s) + failed;
+  return extraMetaInstalled(s);
+}
+
+function extraMetaMissing(s) {
+  return (s.choices || []).length > 1 ? 'Not installed. Choose a version.' : `Not installed. Homebrew formula: ${esc(s.formula)}`;
+}
+
+function extraMetaInstalled(s) {
   let html = `${s.running ? 'Running' : 'Stopped'}<br>${esc(s.detail).replace(', data ', '<br>Data: ').replace(', ', '<br>')}`;
   if (s.dataSource === 'flyenv') html += ' <span class="badge">FlyEnv data</span>';
   if (isDB(s) && s.running) {
