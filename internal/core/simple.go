@@ -2,8 +2,10 @@ package core
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // simpleService describes a service with data only, so a new service of
@@ -28,6 +30,8 @@ type simpleService struct {
 	linkList   func(port int) []Link
 	shellArgv  func(prefix string, port int) []string
 	detailText func(port int) string
+	// started runs once the service answers, for example to make a bucket.
+	started func(port int) error
 }
 
 func (s *simpleService) prefix() string {
@@ -81,7 +85,12 @@ func (s *simpleService) ready(m *Manager) bool {
 	return dialTCP(port)
 }
 
-func (s *simpleService) afterStart(m *Manager) error { return nil }
+func (s *simpleService) afterStart(m *Manager) error {
+	if s.started == nil {
+		return nil
+	}
+	return s.started(m.servicePortOrDefault(s))
+}
 
 func (s *simpleService) detail(m *Manager) string {
 	if s.detailText != nil {
@@ -131,6 +140,75 @@ func simpleServices() []extraService {
 			},
 			envText: func(port int) string {
 				return fmt.Sprintf("CACHE_STORE=memcached\nMEMCACHED_HOST=127.0.0.1\nMEMCACHED_PORT=%d\n", port)
+			},
+		},
+		&simpleService{
+			id: "valkey", name: "Valkey", kind: "database", formula: "valkey", binary: "bin/valkey-server", port: 6379,
+			// Valkey is the open-source Redis. Laravel's Redis settings work unchanged.
+			args: func(dir string, port int) []string {
+				return []string{"--port", fmt.Sprint(port), "--bind", "127.0.0.1", "--dir", dir, "--daemonize", "no"}
+			},
+			envText: func(port int) string {
+				return fmt.Sprintf("REDIS_CLIENT=phpredis\nREDIS_HOST=127.0.0.1\nREDIS_PORT=%d\nREDIS_PASSWORD=null\n", port)
+			},
+			shellArgv: func(prefix string, port int) []string {
+				return []string{filepath.Join(prefix, "bin", "valkey-cli"), "-p", fmt.Sprint(port)}
+			},
+		},
+		&simpleService{
+			id: "meilisearch", name: "Meilisearch", kind: "database", formula: "meilisearch", binary: "bin/meilisearch", port: 7700,
+			args: func(dir string, port int) []string {
+				return []string{"--db-path", filepath.Join(dir, "data.ms"), "--dump-dir", filepath.Join(dir, "dumps"),
+					"--http-addr", fmt.Sprintf("127.0.0.1:%d", port), "--env", "development", "--no-analytics"}
+			},
+			linkList: func(port int) []Link {
+				return []Link{{Label: "Open", URL: fmt.Sprintf("http://127.0.0.1:%d", port)}}
+			},
+			envText: func(port int) string {
+				return fmt.Sprintf("SCOUT_DRIVER=meilisearch\nMEILISEARCH_HOST=http://127.0.0.1:%d\nMEILISEARCH_KEY=\n", port)
+			},
+		},
+		&simpleService{
+			id: "typesense", name: "Typesense", kind: "database", formula: "typesense/tap/typesense-server",
+			prefixName: "typesense-server", binary: "bin/typesense-server", port: 8108,
+			// The API key only guards a server on 127.0.0.1, so a fixed key is fine.
+			args: func(dir string, port int) []string {
+				data := filepath.Join(dir, "data")
+				os.MkdirAll(data, 0o755)
+				return []string{"--data-dir", data, "--api-key", "benchtop", "--api-address", "127.0.0.1",
+					"--api-port", fmt.Sprint(port), "--enable-cors"}
+			},
+			envText: func(port int) string {
+				return fmt.Sprintf("SCOUT_DRIVER=typesense\nTYPESENSE_API_KEY=benchtop\nTYPESENSE_HOST=127.0.0.1\nTYPESENSE_PORT=%d\nTYPESENSE_PROTOCOL=http\n", port)
+			},
+		},
+		&simpleService{
+			id: "seaweedfs", name: "SeaweedFS (S3)", kind: "database", formula: "seaweedfs", binary: "bin/weed", port: 8333,
+			// One process runs the master, a volume, the filer and the S3 API.
+			// The other parts use the ports after the S3 port.
+			args: func(dir string, port int) []string {
+				data := filepath.Join(dir, "data")
+				os.MkdirAll(data, 0o755)
+				return []string{"server", "-dir", data, "-ip", "127.0.0.1", "-ip.bind", "127.0.0.1",
+					"-master.port", fmt.Sprint(port + 1), "-volume.port", fmt.Sprint(port + 2),
+					"-filer", "-filer.port", fmt.Sprint(port + 3), "-s3", "-s3.port", fmt.Sprint(port)}
+			},
+			detailText: func(port int) string {
+				return fmt.Sprintf("S3 port %d, bucket \"local\"", port)
+			},
+			// With no S3 users set, SeaweedFS accepts any key. Make the bucket that
+			// the .env lines name.
+			started: func(port int) error {
+				req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("http://127.0.0.1:%d/local", port), nil)
+				resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+				if err != nil {
+					return err
+				}
+				resp.Body.Close()
+				return nil
+			},
+			envText: func(port int) string {
+				return fmt.Sprintf("FILESYSTEM_DISK=s3\nAWS_ACCESS_KEY_ID=benchtop\nAWS_SECRET_ACCESS_KEY=benchtop\nAWS_DEFAULT_REGION=us-east-1\nAWS_BUCKET=local\nAWS_ENDPOINT=http://127.0.0.1:%d\nAWS_USE_PATH_STYLE_ENDPOINT=true\n", port)
 			},
 		},
 		&simpleService{

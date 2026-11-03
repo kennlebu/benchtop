@@ -2,8 +2,9 @@
 
 A small local development environment manager for macOS. It runs
 **Caddy**, **PHP-FPM** (many versions at the same time), **Pure-FTPd**,
-**Nginx**, **MySQL**, **MariaDB**, **PostgreSQL**, **Redis**, **Memcached**,
-**MongoDB** and **Mailpit** from Homebrew.
+**Nginx**, **MySQL**, **MariaDB**, **PostgreSQL**, **Redis**, **Valkey**,
+**Memcached**, **MongoDB**, **Meilisearch**, **Typesense**, **SeaweedFS** (S3)
+and **Mailpit** from Homebrew.
 
 It is one Go binary with no dependencies. It has a command line and a
 local web dashboard.

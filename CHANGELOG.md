@@ -35,6 +35,9 @@
   `lts/iron`), then `engines.node` in `package.json`, then the `node` on
   your PATH. Benchtop finds Node from nvm, fnm and Homebrew. `benchtop
   which` shows the choice.
+- More services: Valkey, Meilisearch, Typesense and SeaweedFS (S3
+  storage, with a `local` bucket). Each card has "Copy .env" with the
+  Laravel settings. Typesense comes from the `typesense/tap` tap.
 - A site hint when a domain is not in `/etc/hosts`, with a "Sync
   /etc/hosts" button. A new parked folder never opens a password dialog
   by itself.
