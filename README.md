@@ -3,8 +3,7 @@
 A small local development environment manager for macOS. It runs
 **Caddy**, **PHP-FPM** (many versions at the same time), **Pure-FTPd**,
 **Nginx**, **MySQL**, **MariaDB**, **PostgreSQL**, **Redis**, **Memcached**,
-**MongoDB** and **Mailpit** from Homebrew. It is a lightweight alternative to FlyEnv, for the services
-I use every day.
+**MongoDB** and **Mailpit** from Homebrew.
 
 It is one Go binary with no dependencies. It has a command line and a
 local web dashboard.
@@ -153,13 +152,12 @@ to add the Benchtop local CA to the system keychain.
 
 ## Roadmap
 
-See [RFC 0001: Benchtop roadmap](docs/rfcs/0001-roadmap.md). In short:
-
 1. v0.2: optional start at login, smart "Add site", live logs, new layout (done)
 2. v0.3: MySQL, Redis, PostgreSQL, Mailpit (done)
-3. v0.4: PHP extensions, Nginx, more FlyEnv services (done)
-4. v1.0: Homebrew tap, open-source release
-5. Later: native app
+3. v0.4: PHP extensions, Nginx, MariaDB, MongoDB, wildcard domains (done)
+4. v0.5: version picker, PHP installs, parked folders, Node per project
+5. v1.0: Homebrew tap, open-source release
+6. Later: native app
 
 ## License
 

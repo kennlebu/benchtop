@@ -7,8 +7,8 @@ import (
 )
 
 // simpleService describes a service with data only, so a new service of
-// this kind needs no new code (RFC 0001, section 7.3). Benchtop runs the
-// binary in the foreground, as a child process.
+// this kind needs no new code. Benchtop runs the binary in the foreground,
+// as a child process.
 type simpleService struct {
 	id, name, kind string
 	formula        string

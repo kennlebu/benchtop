@@ -61,7 +61,7 @@ Usage:
   benchtop backup FILE                 Save sites, settings and FTP users to a file
   benchtop restore FILE                Add the sites and FTP users from a backup
 
---force stops another program that holds the port (for example FlyEnv).
+--force stops another program that holds the port (for example another local server app).
 Data folder: ~/.benchtop (set BENCHTOP_HOME to change it).
 Turn on "start at login" on the dashboard settings page.
 `

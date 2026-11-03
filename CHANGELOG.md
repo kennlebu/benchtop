@@ -13,7 +13,7 @@
   `benchtop versions` now lists the PHP versions (it was `benchtop php`).
 - Nginx as the web server of a site, behind Caddy. `benchtop site add ... --server nginx`.
 - MariaDB, Memcached and MongoDB. Redis, Memcached, MongoDB and Mailpit
-  now come from data-only definitions (RFC 0001, section 7.3).
+  now come from data-only definitions.
 - Wildcard domains: a small DNS server in Benchtop, with `/etc/resolver` files.
 - Backup and restore: `benchtop backup|restore FILE` and Settings → Backup.
   FTP users get the user ID of this Mac.
