@@ -9,6 +9,11 @@
   Versions run side by side, each with its own port and data folder.
 - The versions come from Homebrew. The dashboard asks it once a day.
   Benchtop hides versions that Homebrew has turned off, and very old ones.
+- Updates: a card shows "Update available" when Homebrew has a newer
+  version, with an Upgrade button. Benchtop restarts the service after the
+  upgrade if it ran. Settings has "Check for updates", and the command
+  line has `benchtop upgrade SERVICE`. A new build of the same version
+  (a Homebrew revision) does not count as an update.
 - More versions: MySQL 9.7 and the newest MySQL, MariaDB 10.11 to 13.0,
   PostgreSQL 18, Redis 8.2, MongoDB 7.0 to 8.3.
 

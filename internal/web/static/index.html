@@ -81,6 +81,7 @@ h2 { font-size: 14px; margin: 0 0 4px; }
 .card .meta { color: var(--muted); font-size: 12px; margin: 6px 0 12px; flex: 1; word-break: break-word; }
 .card .actions { display: flex; gap: 6px; align-items: center; }
 .card .actions .spacer { flex: 1; }
+.card .update { color: var(--accent); font-weight: 600; }
 .card .actions select { width: auto; padding: 3px 6px; font-size: 13px; }
 
 .section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
@@ -245,6 +246,7 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
           <button class="btn" data-act="import">Import from FlyEnv</button>
           <button class="btn" data-act="hosts">Sync /etc/hosts</button>
           <button class="btn" data-act="trust">Trust the HTTPS certificate</button>
+          <button class="btn" data-act="updates">Check for updates</button>
         </div>
       </div>
 
@@ -555,7 +557,7 @@ function renderServices() {
   $('#services').innerHTML = state.services.filter(s => !isExtra(s)).map(s => `
     <div class="card">
       <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
-      <div class="meta">${esc(s.running ? 'Running' : s.installed ? 'Stopped' : 'Not installed')}${s.admin ? ', needs your password' : ''}<br>${esc(s.detail)}${s.usedBy && s.usedBy.length ? `<br>Used by ${esc(s.usedBy.join(', '))}` : ''}</div>
+      <div class="meta">${esc(s.running ? 'Running' : s.installed ? 'Stopped' : 'Not installed')}${s.admin ? ', needs your password' : ''}<br>${esc(s.detail)}${s.usedBy && s.usedBy.length ? `<br>Used by ${esc(s.usedBy.join(', '))}` : ''}${updateLine(s)}</div>
       <div class="actions">
         ${s.running
           ? `<button class="btn small" onclick="svc(this,'${s.id}','restart')">Restart</button><button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
@@ -650,7 +652,7 @@ function extraMeta(s) {
     else if (c.error) html += `<br><span class="danger-text">${esc(c.error)}</span>`;
     else html += '<br>Databases: ' + (c.list.length ? esc(c.list.join(', ')) : 'none yet');
   }
-  return html;
+  return html + updateLine(s);
 }
 
 function renderDatabases() {
@@ -698,6 +700,24 @@ function extraMenu(ev, id) {
   if (s.dataSource === 'flyenv') items.push(['Use Benchtop data folder', () => useFlyEnv(id, false)]);
   items.push(null, ['Log', () => go('logs', id)]);
   showMenu(ev.currentTarget, items);
+}
+
+// updateLine shows a newer Homebrew version, with an Upgrade button.
+function updateLine(s) {
+  if (s.upgrading) return `<br><span class="update">Upgrading…</span> <button class="link" onclick="go('logs','brew')">View output</button>`;
+  if (!s.update) return '';
+  return `<br><span class="update">Update available: ${esc(s.update)}</span> <button class="link" onclick="upgrade(this,'${s.id}')">Upgrade</button>`;
+}
+
+function upgrade(btn, id) {
+  const s = state.services.find(x => x.id === id);
+  const major = v => String(v || '').split('.')[0];
+  const lines = [`Upgrade ${s.name} from ${s.version || 'the installed version'} to ${s.update} with Homebrew?`];
+  if (s.kind === 'database' && major(s.version) !== major(s.update)) lines.push('This is a new major version. Back up your databases first.');
+  if (s.running) lines.push(`Benchtop restarts ${s.name} after the upgrade.` + (s.admin ? ' The restart needs your password.' : ''));
+  lines.push('Homebrew upgrades it for every program that uses it.');
+  if (!confirm(lines.join('\n\n'))) return;
+  busy(btn, async () => { await api('POST', `/api/services/${id}/upgrade`); toast('Upgrading with Homebrew. This can take some minutes.', '', [['View output', () => go('logs', 'brew')]]); });
 }
 
 function install(btn, id) {
@@ -1059,6 +1079,7 @@ const actions = {
   'start-all': () => api('POST', '/api/start-all').then(() => toast('All services started')),
   'stop-all': () => api('POST', '/api/stop-all').then(() => toast('All services stopped')),
   'hosts': () => api('POST', '/api/hosts/sync').then(() => toast('/etc/hosts is up to date')),
+  'updates': () => api('POST', '/api/updates/check').then(r => toast(r.updates ? `${r.updates === 1 ? '1 service has' : r.updates + ' services have'} an update. Its card shows an Upgrade button.` : 'All services are up to date.')),
   'trust': () => api('POST', '/api/trust').then(() => toast('Certificate trusted. Restart your browser.')),
   'import': () => {
     if (!confirm('Import Caddy sites and FTP users from FlyEnv? Benchtop skips items that already exist.')) return;

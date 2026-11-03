@@ -48,6 +48,7 @@ Usage:
   benchtop ftp add USER DIR            Add an FTP user (asks for a password)
   benchtop ftp passwd USER             Change an FTP password
   benchtop ftp rm USER                 Delete an FTP user
+  benchtop upgrade SERVICE             Upgrade a service with Homebrew, then restart it
   benchtop install SERVICE             Install a service version with Homebrew (mysql-8.0, postgres-18, redis, ...)
   benchtop db list SERVICE             List databases (mysql-8.4, postgres-17)
   benchtop db create SERVICE NAME      Create a database
@@ -162,6 +163,19 @@ func run(args []string) error {
 		fmt.Println("Installing. The output is in: benchtop logs brew")
 		m.WaitInstalls()
 		return nil
+	case "upgrade":
+		if len(rest) != 1 {
+			return errors.New("use: benchtop upgrade SERVICE")
+		}
+		if err := m.RefreshCatalog(0); err != nil {
+			return err
+		}
+		if err := m.Upgrade(rest[0]); err != nil {
+			return err
+		}
+		fmt.Println("Upgrading. The output is in: benchtop logs brew")
+		m.WaitInstalls()
+		return nil
 	case "db":
 		return cmdDB(m, rest)
 	case "hosts":
@@ -243,6 +257,9 @@ func printStatus(m *core.Manager) {
 			state = "not installed"
 		}
 		detail := s.Detail
+		if s.Update != "" {
+			state += ", update " + s.Update
+		}
 		if len(s.UsedBy) > 0 {
 			detail += "; used by " + strings.Join(s.UsedBy, ", ")
 		}

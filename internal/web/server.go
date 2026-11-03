@@ -45,6 +45,18 @@ func Handler(m *core.Manager) http.Handler {
 	mux.HandleFunc("POST /api/start-all", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.StartAll() }))
 	mux.HandleFunc("POST /api/stop-all", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.StopAll() }))
 	mux.HandleFunc("POST /api/hosts/sync", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.SyncHosts() }))
+	mux.HandleFunc("POST /api/updates/check", s.wrap(func(r *http.Request) (any, error) {
+		if err := s.m.RefreshCatalog(0); err != nil {
+			return nil, err
+		}
+		n := 0
+		for _, svc := range s.m.Status() {
+			if svc.Update != "" {
+				n++
+			}
+		}
+		return map[string]int{"updates": n}, nil
+	}))
 	mux.HandleFunc("POST /api/trust", s.wrap(func(r *http.Request) (any, error) { return nil, s.m.TrustCA() }))
 	mux.HandleFunc("POST /api/import-flyenv", s.wrap(func(r *http.Request) (any, error) {
 		report, err := s.m.ImportFlyEnv(core.FlyEnvHome())
@@ -398,6 +410,8 @@ func (s *server) service(w http.ResponseWriter, r *http.Request) {
 		err = s.m.Restart(id, force)
 	case "install":
 		err = s.m.Install(id)
+	case "upgrade":
+		err = s.m.Upgrade(id)
 	default:
 		err = errors.New("unknown action " + action)
 	}

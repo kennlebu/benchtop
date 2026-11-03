@@ -267,6 +267,30 @@ func TestServicePortSkipsOtherVersions(t *testing.T) {
 	}
 }
 
+func TestUpdates(t *testing.T) {
+	if got := withoutRevision("8.2.35_1"); got != "8.2.35" {
+		t.Fatalf("withoutRevision: %s", got)
+	}
+	if got := shortFormula("shivammathur/php/php@7.4"); got != "php@7.4" {
+		t.Fatalf("shortFormula: %s", got)
+	}
+	if got := formulaOfBin("/opt/homebrew/opt/no-such-formula/sbin/x"); got != "no-such-formula" {
+		t.Fatalf("formulaOfBin: %s", got)
+	}
+	if got := formulaOfBin("/opt/homebrew/Cellar/caddy/2.8.4/bin/caddy"); got != "caddy" {
+		t.Fatalf("formulaOfBin: %s", got)
+	}
+	setOutdated(map[string]outdatedEntry{"no-such-formula": {Version: "2.0_1"}})
+	defer setOutdated(map[string]outdatedEntry{})
+	// brewVersion is "" for a formula that is not installed, so 2.0 is new.
+	if got := updateFor("no-such-formula"); got != "2.0" {
+		t.Fatalf("updateFor: %q", got)
+	}
+	if got := updateFor("other"); got != "" {
+		t.Fatalf("updateFor other: %q", got)
+	}
+}
+
 type fakeService struct {
 	extraService
 	port int

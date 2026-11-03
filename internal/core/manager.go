@@ -120,6 +120,9 @@ type ServiceStatus struct {
 	Family     string          `json:"family,omitempty"`
 	FamilyName string          `json:"familyName,omitempty"`
 	Choices    []VersionChoice `json:"choices,omitempty"`
+	// Update is a newer version from Homebrew, for the Upgrade button.
+	Update    string `json:"update,omitempty"`
+	Upgrading bool   `json:"upgrading,omitempty"`
 }
 
 func (m *Manager) Status() []ServiceStatus {
@@ -163,9 +166,11 @@ func (m *Manager) Status() []ServiceStatus {
 	users, _ := m.FTPUsers()
 	out = append(out, ServiceStatus{
 		ID: "ftp", Name: "Pure-FTPd", Kind: "ftp", Installed: m.pureFTPdBin() != "", Running: running, PID: pid, Admin: true,
-		Detail: fmt.Sprintf("port %d, %d users", cfg.FTP.Port, len(users)),
+		Version: brewVersion(formulaOfBin(m.pureFTPdBin())),
+		Detail:  fmt.Sprintf("port %d, %d users", cfg.FTP.Port, len(users)),
 	})
 	out = append(out, m.extraStatus()...)
+	m.addUpdates(out)
 	for i := range out {
 		for _, f := range m.serviceFiles(out[i].ID) {
 			if exists(f.Path) {

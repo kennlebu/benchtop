@@ -56,6 +56,8 @@ type catalogEntry struct {
 type catalogFile struct {
 	Updated  time.Time               `json:"updated"`
 	Formulas map[string]catalogEntry `json:"formulas"`
+	// Outdated are the installed formulas with a newer release.
+	Outdated map[string]outdatedEntry `json:"outdated,omitempty"`
 }
 
 var (
@@ -185,10 +187,31 @@ func (m *Manager) LoadCatalog() time.Time {
 	catalogMu.Lock()
 	catalog = c.Formulas
 	catalogMu.Unlock()
+	if c.Outdated != nil {
+		setOutdated(c.Outdated)
+	}
 	return c.Updated
 }
 
-// RefreshCatalog asks Homebrew which versions of each service exist. It
+// saveOutdated writes the list of updates again, for example after an upgrade.
+func (m *Manager) saveOutdated() {
+	data, err := os.ReadFile(m.catalogPath())
+	if err != nil {
+		return
+	}
+	var c catalogFile
+	if json.Unmarshal(data, &c) != nil {
+		return
+	}
+	outdatedMu.RLock()
+	c.Outdated = outdated
+	data, _ = json.MarshalIndent(c, "", "  ")
+	outdatedMu.RUnlock()
+	os.WriteFile(m.catalogPath(), data, 0o644)
+}
+
+// RefreshCatalog asks Homebrew which versions of each service exist, and
+// which installed ones have an update. It
 // takes a second or two, so the dashboard runs it in the background, at
 // most once a day.
 func (m *Manager) RefreshCatalog(maxAge time.Duration) error {
@@ -234,6 +257,9 @@ func (m *Manager) RefreshCatalog(maxAge time.Duration) error {
 			c.Formulas[n] = entries[n] // no version when the tap is not trusted
 		}
 	}
+	if c.Outdated, err = refreshOutdated(brew, env); err != nil {
+		return err
+	}
 	data, _ := json.MarshalIndent(c, "", "  ")
 	if err := os.WriteFile(m.catalogPath(), data, 0o644); err != nil {
 		return err
@@ -241,6 +267,7 @@ func (m *Manager) RefreshCatalog(maxAge time.Duration) error {
 	catalogMu.Lock()
 	catalog = c.Formulas
 	catalogMu.Unlock()
+	setOutdated(c.Outdated)
 	return nil
 }
 
