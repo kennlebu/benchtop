@@ -58,8 +58,11 @@ type extraService interface {
 // extraServices lists the extra services, installed or not.
 func extraServices() []extraService {
 	var out []extraService
-	out = append(out, mysqlServices()...)
-	out = append(out, postgresServices()...)
+	for _, fam := range families() {
+		for _, f := range fam.formulas() {
+			out = append(out, fam.make(f))
+		}
+	}
 	out = append(out, simpleServices()...)
 	out = append(out, &dnsService{}, &nginxService{})
 	return out
@@ -121,8 +124,16 @@ func (m *Manager) servicePort(s extraService) (int, error) {
 	if p := m.serviceSettings(s.ID()).Port; p > 0 {
 		return p, nil
 	}
+	// Other versions of a service keep their saved port, even when they
+	// are stopped, so two versions never get the same port.
+	taken := map[int]bool{}
+	for id, st := range m.Config().Services {
+		if id != s.ID() && st.Port > 0 {
+			taken[st.Port] = true
+		}
+	}
 	port := s.DefaultPort()
-	for portInUse(port) && port < s.DefaultPort()+20 {
+	for (portInUse(port) || taken[port]) && port < s.DefaultPort()+20 {
 		port++
 	}
 	return port, m.setServiceSettings(s.ID(), func(st *ServiceSettings) { st.Port = port })
@@ -260,35 +271,43 @@ func (m *Manager) extraStatus() []ServiceStatus {
 		}
 		out = append(out, status)
 	}
-	// Show one card for each kind that is not installed: the newest formula.
-	return hideOldUninstalled(out)
+	return groupVersions(out)
 }
 
-func hideOldUninstalled(list []ServiceStatus) []ServiceStatus {
-	family := func(id string) string {
-		if i := strings.Index(id, "-"); i > 0 {
-			return id[:i]
-		}
-		return id
-	}
-	installed := map[string]bool{}
+// groupVersions keeps the cards of the installed versions, plus one card
+// for each family with no installed version (the newest). Each card of a
+// family gets the versions that are not installed, for its version menu.
+func groupVersions(list []ServiceStatus) []ServiceStatus {
+	shown := func(s ServiceStatus) bool { return s.Installed || s.Installing || s.Running }
+	choices := map[string][]VersionChoice{}
+	has := map[string]bool{}
 	for _, s := range list {
-		if s.Installed {
-			installed[family(s.ID)] = true
-		}
-	}
-	shown := map[string]bool{}
-	var out []ServiceStatus
-	for _, s := range list {
-		f := family(s.ID)
-		if s.Installed || s.Installing || s.Running {
-			out = append(out, s)
+		f := familyOf(s.ID)
+		if shown(s) {
+			has[f] = true
 			continue
 		}
-		if !installed[f] && !shown[f] {
-			shown[f] = true
-			out = append(out, s)
+		c := VersionChoice{ID: s.ID, Name: s.Name}
+		if e, ok := catalogGet(s.Formula); ok {
+			c.Version, c.Deprecated = e.Version, e.Deprecated
 		}
+		choices[f] = append(choices[f], c)
+	}
+	names := map[string]string{}
+	for _, fam := range families() {
+		names[fam.id] = fam.name
+	}
+	placed := map[string]bool{}
+	var out []ServiceStatus
+	for _, s := range list {
+		f := familyOf(s.ID)
+		if !shown(s) && (has[f] || placed[f]) {
+			continue
+		}
+		placed[f] = true
+		s.Family, s.FamilyName = f, names[f]
+		s.Choices = choices[f]
+		out = append(out, s)
 	}
 	return out
 }

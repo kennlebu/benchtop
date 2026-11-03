@@ -203,7 +203,9 @@ func (m *Manager) InstallPHPExtension(key, name string) error {
 	peclActive[key] = name
 	peclMu.Unlock()
 
+	installs.Add(1)
 	go func() {
+		defer installs.Done()
 		defer func() {
 			peclMu.Lock()
 			delete(peclActive, key)

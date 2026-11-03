@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.0 (unreleased)
+
+### Added
+
+- Version picker: a card for a service that is not installed has a version
+  menu. An installed card has "Install another version" in its menu.
+  Versions run side by side, each with its own port and data folder.
+- The versions come from Homebrew. The dashboard asks it once a day.
+  Benchtop hides versions that Homebrew has turned off, and very old ones.
+- More versions: MySQL 9.7 and the newest MySQL, MariaDB 10.11 to 13.0,
+  PostgreSQL 18, Redis 8.2, MongoDB 7.0 to 8.3.
+
+### Changed
+
+- The newest MySQL, MariaDB, Redis and MongoDB (the formula without "@")
+  have the service ID `mysql`, `mariadb`, `redis` and `mongodb`, so an
+  upgrade keeps the same data folder.
+- A new service version does not take a port that another version saved.
+- `benchtop install` and `benchtop ext install` wait for the end of the
+  install. Before, the install stopped when the command ended.
+
 ## v0.4.0 (unreleased)
 
 ### Added

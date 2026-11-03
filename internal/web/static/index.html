@@ -81,6 +81,7 @@ h2 { font-size: 14px; margin: 0 0 4px; }
 .card .meta { color: var(--muted); font-size: 12px; margin: 6px 0 12px; flex: 1; word-break: break-word; }
 .card .actions { display: flex; gap: 6px; align-items: center; }
 .card .actions .spacer { flex: 1; }
+.card .actions select { width: auto; padding: 3px 6px; font-size: 13px; }
 
 .section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
 .section p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
@@ -605,6 +606,7 @@ async function loadDatabases(id, force) {
 
 function extraActions(s) {
   if (s.installing) return `<span class="note" style="margin:0">Installing…</span><button class="btn small" onclick="go('logs','brew')">View output</button>`;
+  if (!s.installed && (s.choices || []).length > 1) return `<select id="ver-${s.family}" aria-label="${esc(s.familyName)} version">${versionOptions(s)}</select><button class="btn small primary" onclick="install(this, $('#ver-${s.family}').value)">Install</button>`;
   if (!s.installed) return `<button class="btn small primary" onclick="install(this,'${s.id}')">Install with Homebrew</button>`;
   const main = s.running
     ? `<button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
@@ -614,7 +616,31 @@ function extraActions(s) {
   return main + extra + newDB + `<button class="btn small" onclick="copyEnv(this,'${s.id}')">Copy .env</button>`;
 }
 
+// versionLabel names a version in a menu, for example "8.4" or "18 (newest)".
+function versionLabel(s, c, i) {
+  const v = c.name.slice(s.familyName.length).trim() || c.version;
+  const tags = [i === 0 && v ? 'newest' : '', c.deprecated ? 'deprecated' : ''].filter(Boolean);
+  return (v || 'Latest') + (tags.length ? ` (${tags.join(', ')})` : '');
+}
+
+// versionOptions lists the versions that a card can install, the newest first.
+function versionOptions(s) {
+  return s.choices.map((c, i) => `<option value="${esc(c.id)}">${esc(versionLabel(s, c, i))}</option>`).join('');
+}
+
+async function installVersion(id) {
+  const s = state.services.find(x => x.id === id);
+  const v = await ask(`Install another ${s.familyName} version`, [{name: 'id', label: 'Version', options: s.choices.map((c, i) => ({value: c.id, label: versionLabel(s, c, i)}))}],
+    {note: 'Each version has its own port and data folder, so versions can run at the same time.', submit: 'Install'});
+  if (v) install(null, v.id);
+}
+
+function cardName(s) {
+  return !s.installed && !s.installing && (s.choices || []).length > 1 ? s.familyName : s.name;
+}
+
 function extraMeta(s) {
+  if (!s.installed && (s.choices || []).length > 1) return 'Not installed. Choose a version.';
   if (!s.installed) return `Not installed. Homebrew formula: ${esc(s.formula)}`;
   let html = `${s.running ? 'Running' : 'Stopped'}<br>${esc(s.detail).replace(', data ', '<br>Data: ').replace(', ', '<br>')}`;
   if (s.dataSource === 'flyenv') html += ' <span class="badge">FlyEnv data</span>';
@@ -630,13 +656,16 @@ function extraMeta(s) {
 function renderDatabases() {
   const list = state.services.filter(x => x.kind === 'database');
   for (const s of list) if (isDB(s) && s.running && currentView() === 'databases') loadDatabases(s.id);
+  // Keep the chosen versions when the cards draw again.
+  const chosen = [...document.querySelectorAll('#databases select[id^="ver-"]')].map(x => [x.id, x.value]);
   $('#databases').innerHTML = list.map(s => `
     <div class="card">
-      <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
+      <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(cardName(s))}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
       <div class="meta">${extraMeta(s)}</div>
       <div class="actions" style="flex-wrap:wrap">${extraActions(s)}<span class="spacer"></span>
         ${s.installed ? `<button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="extraMenu(event,'${s.id}')">${ICONS.more}</button>` : ''}</div>
     </div>`).join('');
+  for (const [id, value] of chosen) { const x = document.getElementById(id); if (x) x.value = value; }
 }
 
 let mailEnv = null;
@@ -660,10 +689,11 @@ function extraMenu(ev, id) {
     items.push(['New user', () => newDBUser(id)]);
     items.push(['Set root password', () => rootPassword(id)]);
   }
-  if (s.hasShell && s.running) items.push([id === 'redis' ? 'Open redis-cli' : 'Open shell', () => busy(null, () => api('POST', `/api/db/${id}/shell`))]);
+  if (s.hasShell && s.running) items.push([s.family === 'redis' ? 'Open redis-cli' : 'Open shell', () => busy(null, () => api('POST', `/api/db/${id}/shell`))]);
   if (items.length) items.push(null);
   for (const f of s.files || []) items.push(['Edit ' + f.label, () => { openPath('editor', f.path); if (f.note) toast(f.note); }]);
   items.push(['Change port', () => changePort(id)]);
+  if ((s.choices || []).length) items.push(['Install another version', () => installVersion(id)]);
   if (s.flyenvData && s.dataSource !== 'flyenv') items.push(['Use FlyEnv data', () => useFlyEnv(id, true)]);
   if (s.dataSource === 'flyenv') items.push(['Use Benchtop data folder', () => useFlyEnv(id, false)]);
   items.push(null, ['Log', () => go('logs', id)]);

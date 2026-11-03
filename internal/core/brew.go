@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -12,7 +13,13 @@ import (
 var (
 	installMu  sync.Mutex
 	installing = map[string]bool{}
+	// installs counts the Homebrew and PECL installs that run.
+	installs sync.WaitGroup
 )
+
+// WaitInstalls waits for the installs that run in the background. The
+// command line uses it, because its process must not end first.
+func (m *Manager) WaitInstalls() { installs.Wait() }
 
 func (m *Manager) isInstalling(formula string) bool {
 	installMu.Lock()
@@ -29,7 +36,13 @@ func brewBin() string {
 func (m *Manager) Install(id string) error {
 	s, ok := findExtra(id)
 	if !ok {
-		return fmt.Errorf("Benchtop cannot install %q", id)
+		var ids []string
+		for _, e := range extraServices() {
+			if e.Formula() != "" && !e.Installed() {
+				ids = append(ids, e.ID())
+			}
+		}
+		return fmt.Errorf("Benchtop cannot install %q. You can install: %s", id, strings.Join(ids, ", "))
 	}
 	if s.Installed() {
 		return nil
@@ -46,7 +59,9 @@ func (m *Manager) Install(id string) error {
 	installing[s.Formula()] = true
 	installMu.Unlock()
 
+	installs.Add(1)
 	go func() {
+		defer installs.Done()
 		defer func() {
 			installMu.Lock()
 			delete(installing, s.Formula())

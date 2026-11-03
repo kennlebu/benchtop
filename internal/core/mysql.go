@@ -35,34 +35,32 @@ func sqlString(s string) string {
 // mysqlService runs MySQL, or MariaDB when maria is true. The two are
 // close: they differ in binary names, the data folder setup and one option.
 type mysqlService struct {
-	key     string // "8.4"; empty for MariaDB
-	formula string // "mysql@8.4" or "mariadb"
+	key     string // "8.4"; empty for the plain formula (the newest version)
+	label   string // the version to show, for example "8.4" or "26.10"
+	formula string // "mysql@8.4", "mysql" or "mariadb@11.4"
 	maria   bool
 }
 
-func mysqlServices() []extraService {
-	out := []extraService{&mysqlService{key: "8.4", formula: "mysql@8.4"}, &mysqlService{key: "8.0", formula: "mysql@8.0"}}
-	// The plain "mysql" formula is the newest version (9.x).
-	if v := brewVersion("mysql"); v != "" {
-		if pv, ok := parseVersion(v); ok {
-			out = append(out, &mysqlService{key: fmt.Sprintf("%d.%d", pv[0], pv[1]), formula: "mysql"})
-		}
-	}
-	return append(out, &mysqlService{formula: "mariadb", maria: true})
-}
-
 func (s *mysqlService) ID() string {
+	id := "mysql"
 	if s.maria {
-		return "mariadb"
+		id = "mariadb"
 	}
-	return "mysql-" + s.key
+	if s.key != "" {
+		id += "-" + s.key
+	}
+	return id
 }
 
 func (s *mysqlService) Name() string {
+	name := "MySQL"
 	if s.maria {
-		return "MariaDB"
+		name = "MariaDB"
 	}
-	return "MySQL " + s.key
+	if s.label != "" {
+		name += " " + s.label
+	}
+	return name
 }
 
 // server and client are the binary names.
@@ -120,7 +118,7 @@ func (s *mysqlService) flyenvDataDir() string {
 	if s.maria {
 		return ""
 	}
-	d := filepath.Join(FlyEnvHome(), "mysql", "data-"+s.key)
+	d := filepath.Join(FlyEnvHome(), "mysql", "data-"+majorMinor(s.Version()))
 	if exists(filepath.Join(d, "mysql")) {
 		return d
 	}

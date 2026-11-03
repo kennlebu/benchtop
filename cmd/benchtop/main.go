@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -47,7 +48,7 @@ Usage:
   benchtop ftp add USER DIR            Add an FTP user (asks for a password)
   benchtop ftp passwd USER             Change an FTP password
   benchtop ftp rm USER                 Delete an FTP user
-  benchtop install SERVICE             Install a service with Homebrew (mysql-8.4, redis, ...)
+  benchtop install SERVICE             Install a service version with Homebrew (mysql-8.0, postgres-18, redis, ...)
   benchtop db list SERVICE             List databases (mysql-8.4, postgres-17)
   benchtop db create SERVICE NAME      Create a database
   benchtop db user SERVICE USER [DB]   Create a user (asks for a password)
@@ -158,7 +159,8 @@ func run(args []string) error {
 		if err := m.Install(rest[0]); err != nil {
 			return err
 		}
-		fmt.Println("Installing in the background. Follow it with: benchtop logs brew")
+		fmt.Println("Installing. The output is in: benchtop logs brew")
+		m.WaitInstalls()
 		return nil
 	case "db":
 		return cmdDB(m, rest)
@@ -424,6 +426,15 @@ func cmdUI(m *core.Manager, args []string) error {
 		return fmt.Errorf("cannot listen on %s (is the dashboard already running?): %w", addr, err)
 	}
 	srv := &http.Server{Handler: web.Handler(m), ReadHeaderTimeout: 10 * time.Second}
+	// Learn which service versions Homebrew has, once a day.
+	go func() {
+		for {
+			if err := m.RefreshCatalog(24 * time.Hour); err != nil {
+				log.Printf("version list: %v", err)
+			}
+			time.Sleep(time.Hour)
+		}
+	}()
 	fmt.Printf("Benchtop dashboard: %s\nPress Ctrl-C to quit. Services keep running.\n", url)
 	if !*noOpen {
 		go exec.Command("/usr/bin/open", url).Run()
@@ -541,7 +552,8 @@ func cmdExt(m *core.Manager, args []string) error {
 		if err := m.InstallPHPExtension(key, args[2]); err != nil {
 			return err
 		}
-		fmt.Println("Installing in the background. Follow it with: benchtop logs pecl")
+		fmt.Println("Installing. The output is in: benchtop logs pecl")
+		m.WaitInstalls()
 		return nil
 	case "on":
 		return m.SetPHPExtension(key, args[2], true)

@@ -120,32 +120,10 @@ func (s *simpleService) shell(m *Manager) error {
 	return m.openInTerminal(s.id+"-shell", s.shellArgv(s.prefix(), m.servicePortOrDefault(s))...)
 }
 
-// simpleServices are the services that the data below describes.
+// simpleServices are the services that have one version. Redis and MongoDB
+// have many versions, so families() lists them.
 func simpleServices() []extraService {
 	return []extraService{
-		&simpleService{
-			id: "redis", name: "Redis", kind: "database", formula: "redis", binary: "bin/redis-server", port: 6379,
-			custom: "custom.conf", customText: "# Your Redis settings. Restart Redis after you save.\n",
-			config: func(dir string, port int) (string, string) {
-				return "redis.conf", fmt.Sprintf(`# Created by Benchtop. Benchtop replaces this file on each start.
-# Put your own settings in custom.conf.
-port %d
-bind 127.0.0.1 -::1
-protected-mode yes
-daemonize no
-dir %s
-logfile ""
-include %s
-`, port, dir, filepath.Join(dir, "custom.conf"))
-			},
-			args: func(dir string, port int) []string { return []string{filepath.Join(dir, "redis.conf")} },
-			envText: func(port int) string {
-				return fmt.Sprintf("REDIS_HOST=127.0.0.1\nREDIS_PORT=%d\nREDIS_PASSWORD=null\n", port)
-			},
-			shellArgv: func(prefix string, port int) []string {
-				return []string{filepath.Join(prefix, "bin", "redis-cli"), "-p", fmt.Sprint(port)}
-			},
-		},
 		&simpleService{
 			id: "memcached", name: "Memcached", kind: "database", formula: "memcached", binary: "bin/memcached", port: 11211,
 			args: func(dir string, port int) []string {
@@ -153,21 +131,6 @@ include %s
 			},
 			envText: func(port int) string {
 				return fmt.Sprintf("CACHE_STORE=memcached\nMEMCACHED_HOST=127.0.0.1\nMEMCACHED_PORT=%d\n", port)
-			},
-		},
-		&simpleService{
-			id: "mongodb", name: "MongoDB", kind: "database", formula: "mongodb/brew/mongodb-community",
-			prefixName: "mongodb-community", binary: "bin/mongod", port: 27017,
-			args: func(dir string, port int) []string {
-				data := filepath.Join(dir, "data")
-				os.MkdirAll(data, 0o755)
-				return []string{"--dbpath", data, "--port", fmt.Sprint(port), "--bind_ip", "127.0.0.1"}
-			},
-			envText: func(port int) string {
-				return fmt.Sprintf("MONGODB_URI=mongodb://127.0.0.1:%d\n", port)
-			},
-			shellArgv: func(prefix string, port int) []string {
-				return []string{"mongosh", "--port", fmt.Sprint(port)}
 			},
 		},
 		&simpleService{
@@ -189,4 +152,61 @@ include %s
 			},
 		},
 	}
+}
+
+func redisService() *simpleService {
+	return &simpleService{
+		id: "redis", name: "Redis", kind: "database", formula: "redis", binary: "bin/redis-server", port: 6379,
+		custom: "custom.conf", customText: "# Your Redis settings. Restart Redis after you save.\n",
+		config: func(dir string, port int) (string, string) {
+			return "redis.conf", fmt.Sprintf(`# Created by Benchtop. Benchtop replaces this file on each start.
+# Put your own settings in custom.conf.
+port %d
+bind 127.0.0.1 -::1
+protected-mode yes
+daemonize no
+dir %s
+logfile ""
+include %s
+`, port, dir, filepath.Join(dir, "custom.conf"))
+		},
+		args: func(dir string, port int) []string { return []string{filepath.Join(dir, "redis.conf")} },
+		envText: func(port int) string {
+			return fmt.Sprintf("REDIS_HOST=127.0.0.1\nREDIS_PORT=%d\nREDIS_PASSWORD=null\n", port)
+		},
+		shellArgv: func(prefix string, port int) []string {
+			return []string{filepath.Join(prefix, "bin", "redis-cli"), "-p", fmt.Sprint(port)}
+		},
+	}
+}
+
+func mongoService() *simpleService {
+	return &simpleService{
+		id: "mongodb", name: "MongoDB", kind: "database", formula: "mongodb/brew/mongodb-community",
+		prefixName: "mongodb-community", binary: "bin/mongod", port: 27017,
+		args: func(dir string, port int) []string {
+			data := filepath.Join(dir, "data")
+			os.MkdirAll(data, 0o755)
+			return []string{"--dbpath", data, "--port", fmt.Sprint(port), "--bind_ip", "127.0.0.1"}
+		},
+		envText: func(port int) string {
+			return fmt.Sprintf("MONGODB_URI=mongodb://127.0.0.1:%d\n", port)
+		},
+		shellArgv: func(prefix string, port int) []string {
+			return []string{"mongosh", "--port", fmt.Sprint(port)}
+		},
+	}
+}
+
+// simpleVersion makes the service for one version of a family.
+func simpleVersion(base *simpleService, f familyFormula) *simpleService {
+	s := *base
+	s.id, s.formula, s.prefixName = f.id, f.formula, ""
+	if f.opt != f.formula {
+		s.prefixName = f.opt
+	}
+	if f.label != "" {
+		s.name = base.name + " " + f.label
+	}
+	return &s
 }

@@ -51,6 +51,7 @@ func New(home string) (*Manager, error) {
 		return nil, err
 	}
 	m.cfg = cfg
+	m.LoadCatalog()
 	return m, nil
 }
 
@@ -114,6 +115,11 @@ type ServiceStatus struct {
 	FlyEnvData   string `json:"flyenvData,omitempty"`
 	HasShell     bool   `json:"hasShell,omitempty"`
 	HasDatabases bool   `json:"hasDatabases,omitempty"`
+	// Family is "mysql" for all MySQL versions. Choices are the versions
+	// of the family that are not installed.
+	Family     string          `json:"family,omitempty"`
+	FamilyName string          `json:"familyName,omitempty"`
+	Choices    []VersionChoice `json:"choices,omitempty"`
 }
 
 func (m *Manager) Status() []ServiceStatus {

@@ -27,14 +27,6 @@ type postgresService struct {
 	formula string // "postgresql@17"
 }
 
-func postgresServices() []extraService {
-	var out []extraService
-	for _, k := range []string{"17", "16", "15", "14"} {
-		out = append(out, &postgresService{key: k, formula: "postgresql@" + k})
-	}
-	return out
-}
-
 func (s *postgresService) ID() string       { return "postgres-" + s.key }
 func (s *postgresService) Name() string     { return "PostgreSQL " + s.key }
 func (s *postgresService) Kind() string     { return "database" }

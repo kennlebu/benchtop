@@ -31,6 +31,7 @@ benchtop status
 benchtop site add myapp.test ~/Projects/myapp/public --php 8.3
 benchtop ftp add myuser ~/Projects/myapp/ftp
 benchtop install redis     # install a service with Homebrew
+benchtop install mysql-8.0 # install another version, next to the others
 benchtop start mysql-8.4
 benchtop db create mysql-8.4 myapp
 benchtop db env mysql-8.4  # .env lines for Laravel

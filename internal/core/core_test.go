@@ -161,18 +161,58 @@ func TestLoginAgent(t *testing.T) {
 	}
 }
 
-func TestHideOldUninstalled(t *testing.T) {
+func TestGroupVersions(t *testing.T) {
 	in := []ServiceStatus{
-		{ID: "mysql-8.4", Installed: false}, {ID: "mysql-8.0", Installed: false},
+		{ID: "mysql", Name: "MySQL 26.10"}, {ID: "mysql-8.4", Name: "MySQL 8.4"},
 		{ID: "postgres-17"}, {ID: "postgres-16", Installed: true}, {ID: "postgres-15"},
 		{ID: "redis"},
 	}
 	var got []string
-	for _, s := range hideOldUninstalled(in) {
+	out := groupVersions(in)
+	for _, s := range out {
 		got = append(got, s.ID)
 	}
-	if strings.Join(got, ",") != "mysql-8.4,postgres-16,redis" {
+	if strings.Join(got, ",") != "mysql,postgres-16,redis" {
 		t.Fatalf("got %v", got)
+	}
+	if len(out[0].Choices) != 2 || out[0].Choices[1].ID != "mysql-8.4" {
+		t.Fatalf("mysql choices: %+v", out[0].Choices)
+	}
+	if len(out[1].Choices) != 2 || out[1].Family != "postgres" {
+		t.Fatalf("postgres card: %+v", out[1])
+	}
+}
+
+func TestFamilyFormulas(t *testing.T) {
+	catalogMu.Lock()
+	old := catalog
+	catalog = map[string]catalogEntry{
+		"mysql": {Version: "26.10.0"}, "mysql@8.4": {Version: "8.4.13"}, "mysql@5.7": {Version: "5.7.44"},
+		"mysql@9.7": {Version: "9.7.1", Disabled: true}, "mysqltuner": {Version: "2.0"},
+	}
+	catalogMu.Unlock()
+	defer func() { catalogMu.Lock(); catalog = old; catalogMu.Unlock() }()
+	var fam family
+	for _, f := range families() {
+		if f.id == "mysql" {
+			fam = f
+		}
+	}
+	var got []string
+	for _, f := range fam.formulas() {
+		if brewPrefix(f.opt) == "" { // skip what this Mac has installed
+			got = append(got, f.id+"="+f.label)
+		}
+	}
+	// The newest comes first. 5.7 is too old, 9.7 is disabled, and
+	// mysqltuner is another formula.
+	if len(got) == 0 || got[0] != "mysql=26.10" {
+		t.Fatalf("got %v", got)
+	}
+	for _, g := range got {
+		if strings.HasPrefix(g, "mysql-5.7") || strings.HasPrefix(g, "mysql-9.7") || strings.Contains(g, "tuner") {
+			t.Fatalf("got %v", got)
+		}
 	}
 }
 
@@ -200,6 +240,30 @@ func TestServicePortSkipsUsedPort(t *testing.T) {
 	}
 	if port == used || m.serviceSettings("fake").Port != port {
 		t.Fatalf("want a free saved port, got %d (used %d)", port, used)
+	}
+}
+
+func TestServicePortSkipsOtherVersions(t *testing.T) {
+	m, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	free := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	// Another version saved this port, but it is stopped now.
+	if err := m.setServiceSettings("other", func(st *ServiceSettings) { st.Port = free }); err != nil {
+		t.Fatal(err)
+	}
+	port, err := m.servicePort(&fakeService{port: free})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port == free {
+		t.Fatalf("got the port of the other version: %d", port)
 	}
 }
 
