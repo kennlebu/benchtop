@@ -7,6 +7,9 @@
 - `config.json` has a format `version`. Benchtop moves an older config to
   the current format and keeps the old file as `config.json.v<N>.bak`. It
   refuses a config from a newer Benchtop, so a save cannot drop fields.
+- Docs: a short README, plus `docs/getting-started.md`, `docs/guide.md`,
+  `docs/flyenv.md`, `docs/troubleshooting.md` and `CONTRIBUTING.md` (with
+  how to add a service).
 
 ## v0.5.0 (unreleased)
 
