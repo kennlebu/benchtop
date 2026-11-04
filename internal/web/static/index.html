@@ -4,22 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Benchtop</title>
+<script>
+// Set the theme before the page draws, so it does not flash. "system"
+// follows macOS. The choice is kept in this browser only.
+function applyTheme(choice) {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = choice === 'system' || !choice ? (dark ? 'dark' : 'light') : choice;
+}
+let themeChoice = 'system';
+try { themeChoice = localStorage.getItem('benchtop-theme') || 'system'; } catch (e) {}
+applyTheme(themeChoice);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(themeChoice));
+</script>
 <style>
+/* Each theme is one set of colour values. Every theme must meet WCAG AA:
+   4.5:1 for text, 3:1 for field borders and status dots. */
 :root {
-  /* Colours meet WCAG AA: 4.5:1 for text, 3:1 for field borders and status dots. */
   --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5c6476; --line: #e3e6ec; --field: #848c9c;
   --accent: #2f55e0; --accent-text: #fff; --accent-soft: #eaefff;
   --ok: #1a8a4a; --off: #868d9b; --warn: #a87300; --danger: #c23b3b;
   --warn-bg: #fff6e0; --warn-text: #7a5600; --err-bg: #fdecec; --err-text: #9b1c1c;
   --code: #f0f2f5; --shadow: 0 1px 2px rgba(16,24,40,.06); --pop: 0 8px 24px rgba(16,24,40,.16);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12151b; --panel: #1a1e26; --text: #e6e9ef; --muted: #99a1b2; --line: #2a303b; --field: #6b7385;
-    --accent: #7d96ff; --accent-text: #0e1530; --accent-soft: #232c4a; --ok: #3ecf7a; --off: #717a8c; --warn: #e5b23c; --danger: #ef6666;
-    --warn-bg: #3a2f12; --warn-text: #f3d48a; --err-bg: #3b1c1c; --err-text: #f6b0b0;
-    --code: #232833; --shadow: none; --pop: 0 8px 24px rgba(0,0,0,.5);
-  }
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1e26; --text: #e6e9ef; --muted: #99a1b2; --line: #2a303b; --field: #6b7385;
+  --accent: #7d96ff; --accent-text: #0e1530; --accent-soft: #232c4a; --ok: #3ecf7a; --off: #717a8c; --warn: #e5b23c; --danger: #ef6666;
+  --warn-bg: #3a2f12; --warn-text: #f3d48a; --err-bg: #3b1c1c; --err-text: #f6b0b0;
+  --code: #232833; --shadow: none; --pop: 0 8px 24px rgba(0,0,0,.5);
+  color-scheme: dark;
+}
+/* High contrast: text meets WCAG AAA (7:1). */
+:root[data-theme="contrast"] {
+  --bg: #ffffff; --panel: #ffffff; --text: #000000; --muted: #2e2e2e; --line: #1a1a1a; --field: #1a1a1a;
+  --accent: #0033b3; --accent-text: #fff; --accent-soft: #dfe7ff; --ok: #006b2e; --off: #4d4d4d; --warn: #7a5200; --danger: #a30000;
+  --warn-bg: #fff4cc; --warn-text: #4d3300; --err-bg: #ffe5e5; --err-text: #7a0000;
+  --code: #eeeeee; --shadow: none; --pop: 0 0 0 2px #000;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 14.5px/1.5 "Avenir Next", Avenir, "Helvetica Neue", sans-serif; font-variant-numeric: tabular-nums; }
@@ -239,6 +258,20 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
         <h2>Data folder</h2>
         <p id="homePath"></p>
         <button class="btn" onclick="openPath('finder', state.home)">Show in Finder</button>
+      </div>
+
+      <div class="section">
+        <h2>Appearance</h2>
+        <p>The theme applies to this browser.</p>
+        <div class="fields"><div>
+          <label class="field" for="theme" style="margin-top:0">Theme</label>
+          <select id="theme" onchange="setTheme(this.value)">
+            <option value="system">System (follows macOS)</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+            <option value="contrast">High contrast</option>
+          </select>
+        </div></div>
       </div>
 
       <div class="section">
@@ -1144,6 +1177,13 @@ function route() {
   if (v === 'databases' && state) { for (const id in dbCache) delete dbCache[id]; renderDatabases(); }
 }
 addEventListener('hashchange', route);
+
+function setTheme(choice) {
+  themeChoice = choice;
+  try { localStorage.setItem('benchtop-theme', choice); } catch (e) {}
+  applyTheme(choice);
+}
+$('#theme').value = themeChoice;
 
 const actions = {
   'start-all': () => api('POST', '/api/start-all').then(() => toast('All services started')),

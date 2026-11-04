@@ -102,7 +102,9 @@ implements `databaseService` (see `mysql.go`).
 - Keep the dashboard simple: one card per service, advanced options in
   closed sections, and a fix button for each error.
 - Colours must pass WCAG 2.1 AA: 4.5:1 for text, 3:1 for field borders and
-  status dots. All colours are CSS variables in `:root`.
+  status dots. All colours are CSS variables. A theme is one block of
+  values, for example `:root[data-theme="dark"]`. A new theme needs an
+  option in the Appearance menu, and must pass the same checks.
 - Write short, plain sentences. Do not use "·" as a separator.
 - Every dashboard action also needs a command.
 

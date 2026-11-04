@@ -15,8 +15,8 @@
 - **Mail**: Mailpit catches the mail that your apps send.
 - **FTP**: virtual FTP users, each with a home folder.
 - **Logs**: live logs for Caddy, each site, each PHP version and each service.
-- **Settings**: start at login, the editor and terminal apps, ports, tools,
-  and backup.
+- **Settings**: start at login, the editor and terminal apps, ports, the
+  theme (System, Light, Dark or High contrast), tools, and backup.
 
 Every action in the dashboard also has a command. Run `benchtop help` for
 the list.
