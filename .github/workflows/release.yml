@@ -1,0 +1,29 @@
+name: Release
+
+# Push a tag such as v1.0.0 to build the macOS files and make a GitHub
+# release with them. See RELEASING.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test
+      - run: make dist
+      - name: Make the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="## ${GITHUB_REF_NAME} " '$0 ~ "^"v {on=1; next} /^## / && on {exit} on' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt --title "$GITHUB_REF_NAME" --notes "${notes:-See CHANGELOG.md}"

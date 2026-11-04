@@ -200,7 +200,7 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
     </section>
 
     <section class="view" id="view-settings">
-      <div class="view-head"><h1>Settings</h1></div>
+      <div class="view-head"><h1>Settings</h1><span class="note" id="version"></span></div>
 
       <div class="section">
         <div class="switch-row">
@@ -397,6 +397,7 @@ function connect() {
 function render(s) {
   if (state && state.started && s.started !== state.started) { location.reload(); return; }
   state = s;
+  $('#version').textContent = 'Benchtop ' + (s.version === 'dev' ? 'development build' : /^\d/.test(s.version) ? 'v' + s.version : s.version);
   const svcs = s.services.filter(x => x.installed && (
     x.kind === 'php' ? x.running || (x.usedBy || []).length :
     isExtra(x) || x.kind === 'dns' || x.kind === 'nginx' ? x.running || x.enabled : true));

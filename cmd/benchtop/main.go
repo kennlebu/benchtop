@@ -29,6 +29,7 @@ Usage:
   benchtop ui [--port N] [--no-open]   Open the web dashboard
   benchtop ui --background             Run the dashboard after the terminal closes
   benchtop ui --stop                   Stop the background dashboard
+  benchtop version                     Show the Benchtop version
   benchtop status                      Show services
   benchtop start [SERVICE] [--force]   Start all, or caddy | php | php-8.2 | ftp
   benchtop start --login               Start what the "start at login" setting names
@@ -72,7 +73,11 @@ Data folder: ~/.benchtop (set BENCHTOP_HOME to change it).
 Turn on "start at login" on the dashboard settings page.
 `
 
+// version is set at build time: go build -ldflags "-X main.version=1.0.0".
+var version = "dev"
+
 func main() {
+	web.Version = version
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
@@ -82,6 +87,10 @@ func main() {
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		fmt.Print(usage)
+		return nil
+	}
+	if args[0] == "version" || args[0] == "--version" {
+		fmt.Println("benchtop", version)
 		return nil
 	}
 	m, err := core.New(core.DefaultHome())

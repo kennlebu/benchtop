@@ -10,6 +10,10 @@
 - Docs: a short README, plus `docs/getting-started.md`, `docs/guide.md`,
   `docs/flyenv.md`, `docs/troubleshooting.md` and `CONTRIBUTING.md` (with
   how to add a service).
+- `benchtop version`, and the version on the Settings page.
+- Release files: `make dist` builds Benchtop for Apple Silicon and Intel
+  Macs. A version tag starts a GitHub workflow that makes the release. A
+  Homebrew formula that builds from source is in `packaging/homebrew`.
 
 ## v0.5.0 (unreleased)
 

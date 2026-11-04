@@ -111,3 +111,5 @@ implements `databaseService` (see `mysql.go`).
 - Run `make test` and `gofmt` before you push.
 - Add a line to `CHANGELOG.md` under the unreleased version.
 - Describe how you tested the change.
+
+Maintainers: [RELEASING.md](RELEASING.md) has the release steps.

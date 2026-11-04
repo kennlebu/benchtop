@@ -26,7 +26,9 @@ It is one Go binary with a command line and a web dashboard on
 
 ## Install
 
-Benchtop needs macOS and [Homebrew](https://brew.sh).
+Benchtop needs macOS and [Homebrew](https://brew.sh). After the first
+release, it installs with `brew install kennlebu/tap/benchtop`. Until then,
+build it from source:
 
 ```bash
 brew install caddy php          # the minimum: a web server and one PHP

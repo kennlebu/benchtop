@@ -28,6 +28,9 @@ var static embed.FS
 // it sees a new value, so it never runs old code against a new server.
 var started = time.Now().UnixNano()
 
+// Version is the Benchtop version. The command line sets it.
+var Version = "dev"
+
 type server struct {
 	m *core.Manager
 }
@@ -302,6 +305,7 @@ func (s *server) state() map[string]any {
 		"apps":           map[string]any{"editors": editors, "terminals": terminals},
 		"caddyfile":      s.m.CaddyfilePath(),
 		"started":        started,
+		"version":        Version,
 		"parked":         s.m.Parked(),
 	}
 }
