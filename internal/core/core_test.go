@@ -444,3 +444,29 @@ func TestSubdomains(t *testing.T) {
 		t.Fatalf("nginx:\n%s", ng)
 	}
 }
+
+// An old config moves to the current format and keeps a backup. A config
+// from a newer build must not load, because a save would drop its fields.
+func TestConfigVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	old := `{"httpPort": 8080, "sites": [{"id": "a", "domains": ["a.test"], "root": "/tmp"}]}`
+	os.WriteFile(path, []byte(old), 0o600)
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Version != ConfigVersion || cfg.HTTPPort != 8080 || len(cfg.Sites) != 1 {
+		t.Fatalf("got %+v", cfg)
+	}
+	if bak, _ := os.ReadFile(path + ".v0.bak"); string(bak) != old {
+		t.Fatal("the old config was not kept")
+	}
+	if data, _ := os.ReadFile(path); !strings.Contains(string(data), `"version": 1`) {
+		t.Fatal("the new format was not saved")
+	}
+	os.WriteFile(path, []byte(`{"version": 99, "sites": []}`), 0o600)
+	if _, err := loadConfig(path); err == nil {
+		t.Fatal("a config from a newer build must not load")
+	}
+}

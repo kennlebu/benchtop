@@ -55,6 +55,8 @@ type LoginSettings struct {
 }
 
 type Config struct {
+	// Version is the format of this file. See ConfigVersion.
+	Version    int           `json:"version"`
 	HTTPPort   int           `json:"httpPort"`
 	HTTPSPort  int           `json:"httpsPort"`
 	CaddyAdmin string        `json:"caddyAdmin"`
@@ -72,8 +74,22 @@ type Config struct {
 	Services map[string]ServiceSettings `json:"services,omitempty"`
 }
 
+// ConfigVersion is the format of config.json that this build writes. When a
+// change needs more than a new field with a zero default, raise it and add
+// a step to migrations.
+const ConfigVersion = 1
+
+// migrations[n] changes a config of format n to format n+1. A step works on
+// the raw JSON, so it can rename, move or drop fields.
+var migrations = map[int]func(raw map[string]any) error{
+	// Configs from v0.2 to v0.5 have no version field. Their fields are the
+	// same as format 1.
+	0: func(raw map[string]any) error { return nil },
+}
+
 func defaultConfig() *Config {
 	return &Config{
+		Version:    ConfigVersion,
 		HTTPPort:   80,
 		HTTPSPort:  443,
 		CaddyAdmin: "localhost:2099",
@@ -94,8 +110,40 @@ func loadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	version := 0
+	if v, ok := raw["version"].(float64); ok {
+		version = int(v)
+	}
+	if version > ConfigVersion {
+		// Saving it would drop the fields that this build does not know.
+		return nil, fmt.Errorf("%s is from a newer Benchtop (format %d, this build knows %d). Update Benchtop", path, version, ConfigVersion)
+	}
+	if version < ConfigVersion {
+		// Keep the old file, then move it up one format at a time.
+		if err := os.WriteFile(fmt.Sprintf("%s.v%d.bak", path, version), data, 0o600); err != nil {
+			return nil, err
+		}
+		for v := version; v < ConfigVersion; v++ {
+			if err := migrations[v](raw); err != nil {
+				return nil, fmt.Errorf("move %s from format %d to %d: %w", path, v, v+1, err)
+			}
+		}
+		raw["version"] = ConfigVersion
+		if data, err = json.Marshal(raw); err != nil {
+			return nil, err
+		}
+	}
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	if version < ConfigVersion {
+		if err := saveConfig(path, cfg); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.Sites == nil {
 		cfg.Sites = []Site{}
