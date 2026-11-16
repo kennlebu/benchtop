@@ -49,8 +49,10 @@ a:hover { text-decoration: underline; }
 
 header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand { font-weight: 650; font-size: 16px; margin-right: 6px; }
-.pill { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; flex: 1; }
-.layout { display: flex; max-width: 1180px; margin: 0 auto; }
+.pill { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+.mono { font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); }
+.layout { display: flex; max-width: 1280px; margin: 0 auto; }
 nav { width: 190px; flex: none; padding: 18px 10px; position: sticky; top: 53px; align-self: flex-start; }
 nav a { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-radius: 8px; color: var(--text); margin-bottom: 2px; }
 nav a:hover { background: var(--code); text-decoration: none; }
@@ -67,6 +69,8 @@ h2 { font-size: 14px; margin: 0 0 4px; }
 .btn:hover { border-color: var(--text); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .btn.small { padding: 3px 9px; font-size: 13px; }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn.ghost:hover { border-color: var(--field); color: var(--text); }
 .btn:disabled { opacity: .5; cursor: progress; }
 .icon { border: 1px solid transparent; background: none; width: 30px; height: 30px; border-radius: 7px; cursor: pointer; display: inline-grid; place-items: center; color: var(--muted); }
 .icon:hover { background: var(--code); color: var(--text); }
@@ -87,11 +91,35 @@ h2 { font-size: 14px; margin: 0 0 4px; }
 .item-title .name { font-weight: 600; }
 .item-title .sub { color: var(--muted); font-size: 12px; font-family: "SF Mono", Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; white-space: nowrap; }
-.hint { display: flex; align-items: center; gap: 10px; margin: 8px 0 0 21px; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
-.hint.warn { background: var(--warn-bg); color: var(--warn-text); }
-.hint.error { background: var(--err-bg); color: var(--err-text); }
-.hint span { flex: 1; }
+/* A site problem is one short line under the site name, with its fix as a link. */
+.problem { font-size: 13px; }
+.problem.error { color: var(--err-text); }
+.problem.warn { color: var(--warn-text); }
+.problem .link { margin-left: 6px; text-decoration: underline; }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
+
+/* Sites page: the site list, and a rail with every installed service. */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 16px; align-items: start; }
+.rail { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 0 10px; box-shadow: var(--shadow); position: sticky; top: 70px; }
+.rail h2 { font-size: 12px; color: var(--muted); margin: 10px 14px 2px; }
+.rsvc { display: flex; align-items: center; gap: 10px; padding: 5px 14px; }
+.rsvc .t { flex: 1; min-width: 0; font-size: 13.5px; }
+.rsvc .t small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 14px 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+
+/* Services and databases: one row each, the same way as the site list. */
+.srow { display: grid; grid-template-columns: 9px minmax(110px, 180px) 76px minmax(0, 1fr) auto; grid-template-areas: "dot name ver detail act"; gap: 12px; align-items: center; padding: 9px 14px; min-height: 50px; border-bottom: 1px solid var(--line); }
+.srow:last-child { border-bottom: none; }
+.srow > .dot { grid-area: dot; }
+.srow .c-name { grid-area: name; font-weight: 600; }
+.srow .c-ver { grid-area: ver; }
+.srow .c-detail { grid-area: detail; color: var(--muted); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.srow .c-act { grid-area: act; display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+.install { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 14px; border: 1px dashed var(--field); border-radius: 12px; }
+.install select { width: auto; padding: 3px 6px; font-size: 13px; }
+.chip { border: 1px solid var(--field); background: var(--panel); border-radius: 8px; padding: 3px 10px; font-size: 13px; cursor: pointer; }
+.chip:hover { border-color: var(--text); }
+.updates { font-size: 13px; color: var(--muted); text-align: right; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
@@ -152,14 +180,23 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
 .toast.warn { background: var(--warn-bg); color: var(--warn-text); border-color: transparent; }
 .toast .acts { margin-top: 8px; display: flex; gap: 6px; }
 
+@media (max-width: 1000px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: static; }
+}
 @media (max-width: 760px) {
   header { padding: 10px 16px; flex-wrap: wrap; }
+  header .pill { order: 3; flex-basis: 100%; }
+  header .brand { flex: 1; }
   .layout { flex-direction: column; }
-  nav { width: auto; position: sticky; top: 0; display: flex; gap: 4px; overflow-x: auto; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+  /* align-self: stretch keeps the nav as wide as the screen. Without it the
+     nav grows to fit its links and the whole page scrolls sideways. */
+  nav { width: auto; position: sticky; top: 0; align-self: stretch; display: flex; gap: 4px; overflow-x: auto; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--line); }
   nav a { flex: none; margin: 0; gap: 6px; }
   main { padding: 16px 16px 60px; }
   .hide-sm { display: none; }
-  .hint { margin-left: 0; }
+  .srow { grid-template-columns: 9px minmax(0, 1fr) auto; grid-template-areas: "dot name act" ". detail detail"; row-gap: 2px; }
+  .srow .c-ver { display: none; }
 }
 </style>
 </head>
@@ -167,8 +204,8 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
 <header>
   <span class="brand">Benchtop</span>
   <span class="pill"><span class="dot" id="allDot"></span><span id="allText">Loading…</span></span>
-  <button class="btn primary" data-act="start-all">Start all</button>
-  <button class="btn" data-act="stop-all">Stop all</button>
+  <button class="btn" data-act="start-all" id="startAll">Start all</button>
+  <button class="btn ghost" data-act="stop-all">Stop all</button>
 </header>
 
 <div class="layout">
@@ -184,18 +221,20 @@ pre.log { background: var(--code); border-radius: 10px; padding: 12px; height: c
   <main>
     <section class="view" id="view-sites">
       <div class="view-head"><h1>Sites</h1><div class="tools"><button class="btn" onclick="parkFolder()">Park a folder</button><button class="btn primary" onclick="editSite()">Add site</button></div></div>
-      <div id="sites"></div>
-      <div id="parked"></div>
+      <div class="split">
+        <div><div id="sites"></div><div id="parked"></div></div>
+        <aside class="rail" id="rail" aria-label="Services"></aside>
+      </div>
     </section>
 
     <section class="view" id="view-services">
-      <div class="view-head"><h1>Services</h1></div>
-      <div class="grid" id="services"></div>
+      <div class="view-head"><h1>Services</h1><span class="updates" id="servicesUpdates"></span></div>
+      <div id="services"></div>
     </section>
 
     <section class="view" id="view-databases">
-      <div class="view-head"><h1>Databases</h1></div>
-      <div class="grid" id="databases"></div>
+      <div class="view-head"><h1>Databases</h1><span class="updates" id="databasesUpdates"></span></div>
+      <div id="databases"></div>
     </section>
 
     <section class="view" id="view-mail">
@@ -435,17 +474,17 @@ function render(s) {
     x.kind === 'php' ? x.running || (x.usedBy || []).length :
     isExtra(x) || x.kind === 'dns' || x.kind === 'nginx' ? x.running || x.enabled : true));
   const up = svcs.filter(x => x.running).length;
-  $('#allDot').className = 'dot ' + (up === 0 ? '' : up === svcs.length ? 'ok' : 'warn');
-  $('#allText').textContent = up === 0 ? 'All stopped' : up === svcs.length ? `All ${up} running` : `${up} of ${svcs.length} running`;
+  renderStatus(up, svcs.length);
   $('#nSites').textContent = s.sites.length;
   const web = s.services.filter(x => !isExtra(x) && x.kind !== 'dns' && (x.kind !== 'nginx' || x.installed));
-  $('#nServices').textContent = `${web.filter(x => x.running).length}/${web.length}`;
+  $('#nServices').textContent = `${web.filter(x => x.running).length} of ${web.length}`;
   const dbs = s.services.filter(x => x.kind === 'database' && x.installed);
-  $('#nDB').textContent = dbs.length ? `${dbs.filter(x => x.running).length}/${dbs.length}` : '';
+  $('#nDB').textContent = dbs.length ? `${dbs.filter(x => x.running).length} of ${dbs.length}` : '';
   const mail = s.services.find(x => x.kind === 'mail');
   $('#nMail').textContent = mail && mail.running ? 'on' : '';
   $('#nFTP').textContent = s.ftpUsers.length;
   if (!document.querySelector('dialog[open]')) { renderSites(); renderFTP(); }
+  renderRail();
   renderServices();
   renderDatabases();
   renderMail();
@@ -453,6 +492,76 @@ function render(s) {
 }
 
 const isExtra = (x) => x.kind === 'database' || x.kind === 'mail';
+
+// tilde shows a path in the home folder as ~/..., so the project name is visible.
+function tilde(p) {
+  const h = state && state.userHome;
+  return h && (p === h || String(p).startsWith(h + '/')) ? '~' + p.slice(h.length) : p;
+}
+// andList joins names: "a", "a and b", "a, b and c".
+const andList = (a) => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+const plural = (n, one, many) => n === 1 ? one : many;
+const shortName = (x) => x.kind === 'php' ? 'PHP ' + x.id.slice(4) : x.name;
+
+// needed is true when a stopped service breaks sites that should work now.
+// When everything is stopped, nothing is "needed": that is a normal state.
+function needed(x) {
+  if (x.running || !x.installed) return false;
+  const caddy = state.services.find(y => y.id === 'caddy');
+  if (x.kind === 'php') return !!(caddy && caddy.running) && (x.usedBy || []).length > 0;
+  return x.id === 'caddy' && state.sites.length > 0 && state.services.some(y => y.running);
+}
+
+// renderStatus names the problem in the header, not only a count.
+function renderStatus(up, total) {
+  const caddy = state.services.find(x => x.id === 'caddy');
+  const broken = state.sites.filter(e => (e.hints || []).some(h => h.level === 'error')).length;
+  const php = state.services.filter(x => x.kind === 'php' && needed(x)).map(shortName);
+  let dot = 'ok', text = `All ${up} running`, more = '';
+  if (up === 0) { dot = ''; text = 'All stopped'; }
+  else if (caddy && needed(caddy)) { dot = 'error'; text = 'Caddy is stopped, so no site loads.'; }
+  else if (broken) {
+    dot = 'error';
+    text = `${broken} ${plural(broken, 'site gives', 'sites give')} errors.`;
+    if (php.length) more = `${andList(php)} ${plural(php.length, 'is', 'are')} stopped.`;
+  } else if (up < total) { dot = 'warn'; text = `${up} of ${total} running`; }
+  $('#allDot').className = 'dot ' + dot;
+  $('#allText').innerHTML = esc(text) + (more ? ` <span class="muted">${esc(more)}</span>` : '');
+  $('#startAll').classList.toggle('primary', up === 0);
+}
+
+// ---------- Service rail on the Sites page ----------
+function railSub(x) {
+  if (x.kind === 'php') {
+    const n = (x.usedBy || []).length;
+    if (!n) return 'No sites';
+    return x.running ? `${n} ${plural(n, 'site', 'sites')}` : `${n} ${plural(n, 'site needs', 'sites need')} it`;
+  }
+  const first = tilde(String(x.detail || '').split(', ')[0]);
+  return first + (x.admin && !x.running ? ', needs your password' : '');
+}
+
+function renderRail() {
+  const inst = state.services.filter(x => x.installed);
+  const groups = [
+    ['Web', inst.filter(x => !isExtra(x) && x.kind !== 'ftp')],
+    ['Data', inst.filter(x => x.kind === 'database')],
+    ['Mail and FTP', inst.filter(x => x.kind === 'mail' || x.kind === 'ftp')],
+  ].filter(g => g[1].length);
+  const updates = state.services.filter(x => x.update && !x.upgrading);
+  const rows = (list) => list.map(x => {
+    const need = needed(x), name = shortName(x);
+    const btn = x.running
+      ? `<button class="btn small" aria-label="Stop ${esc(name)}" onclick="svc(this,'${x.id}','stop')">Stop</button>`
+      : `<button class="btn small${need ? ' primary' : ''}" aria-label="Start ${esc(name)}" onclick="svc(this,'${x.id}','start')">Start</button>`;
+    return `<div class="rsvc"><span class="dot ${x.running ? 'ok' : need ? 'error' : ''}"></span>
+      <span class="t">${esc(name)}<small title="${esc(x.detail)}">${esc(railSub(x))}</small></span>${btn}</div>`;
+  }).join('');
+  // The link opens the page of the first service with an update.
+  const upView = !updates.length ? '' : {database: 'databases', mail: 'mail'}[updates[0].kind] || 'services';
+  $('#rail').innerHTML = groups.map(([title, list]) => `<h2>${title}</h2>${rows(list)}`).join('') +
+    `<div class="links"><a href="#services">All services</a>${updates.length ? `<a href="#${upView}">${updates.length} ${plural(updates.length, 'update', 'updates')} available</a>` : ''}</div>`;
+}
 
 // ---------- Sites ----------
 function siteDot(entry) {
@@ -469,7 +578,7 @@ function renderParked() {
   $('#parked').innerHTML = !list.length ? '' : `<div class="section" style="margin-top:14px">
     <h2>Parked folders</h2>
     <p>Each project folder in a parked folder gets a site: <code>name.test</code>. Benchtop finds new folders by itself.</p>
-    ${list.map(d => `<div class="switch-row" style="margin-top:6px"><span class="sub" style="flex:1;font-family:'SF Mono',Menlo,monospace;font-size:12px">${esc(d)}</span>
+    ${list.map(d => `<div class="switch-row" style="margin-top:6px"><span class="mono" style="flex:1" title="${esc(d)}">${esc(tilde(d))}</span>
       <button class="btn small" onclick="unparkFolder(${esc(JSON.stringify(d))})">Remove</button></div>`).join('')}
   </div>`;
 }
@@ -496,16 +605,18 @@ function renderSites() {
     return `<div class="item">
       <div class="item-main">
         <span class="dot ${siteDot(e)}"></span>
-        <div class="item-title">
+        <div class="item-title" title="${esc(s.root)}">
           <div class="name"><a href="${esc(e.url)}" target="_blank">${esc(s.domains[0])}</a>${s.https ? ' <span class="badge">HTTPS</span>' : ''}${s.subdomains && !s.parked ? ` <span class="badge" title="*.${esc(s.domains[0])} goes to this site too">Subdomains</span>` : ''}${s.domains.length > 1 ? ` <span class="badge" title="${esc(s.domains.slice(1).join(', '))}">+${s.domains.length - 1}</span>` : ''}</div>
-          <div class="sub" title="${esc(s.root)}">${esc(s.root)}</div>
+          ${(e.hints || []).length
+            // A site with a problem shows the problem in place of its folder.
+            ? e.hints.map((h, i) => `<div class="problem ${h.level}">${esc(h.message)}${h.fix ? `<button class="link" onclick="applyFix(this, '${esc(s.id)}', ${i})">${esc(h.fix.label)}</button>` : ''}</div>`).join('')
+            : `<div class="sub">${esc(tilde(s.root))}</div>`}
         </div>
         ${s.parked ? `<span class="badge" title="From the parked folder ${esc(s.parked)}">Parked</span>` : ''}${s.server === 'nginx' ? '<span class="badge">Nginx</span>' : ''}<span class="badge">${s.php ? 'PHP ' + esc(s.php) : 'Static'}</span>
         <a class="icon hide-sm" href="${esc(e.url)}" target="_blank" title="Open in browser" aria-label="Open ${esc(s.domains[0])} in browser">${ICONS.open}</a>
         <button class="icon" title="Show folder in Finder" aria-label="Show folder" onclick="openPath('finder', ${esc(JSON.stringify(s.root))})">${ICONS.folder}</button>
         <button class="icon" title="More" aria-label="More actions" onclick="siteMenu(event, '${esc(s.id)}')">${ICONS.more}</button>
       </div>
-      ${(e.hints || []).map((h, i) => `<div class="hint ${h.level}"><span>${esc(h.message)}</span>${h.fix ? `<button class="btn small" onclick="applyFix(this, '${esc(s.id)}', ${i})">${esc(h.fix.label)}</button>` : ''}</div>`).join('')}
     </div>`;
   }).join('')}</div>`;
 }
@@ -619,49 +730,78 @@ function deleteSite(id) {
 }
 
 // ---------- Services ----------
+// srow draws one service as a row: dot, name, version, details, actions.
+function srow({dot = '', name, ver = '', detail = '', actions = ''}) {
+  return `<div class="srow"><span class="dot ${dot}"></span><div class="c-name">${name}</div><div class="c-ver mono">${ver}</div><div class="c-detail">${detail}</div><div class="c-act">${actions}</div></div>`;
+}
+const moreBtn = (s, fn) => `<button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="${fn}(event, '${s.id}')">${ICONS.more}</button>`;
+const viewOutput = `<button class="link" onclick="go('logs','brew')">View output</button>`;
+
+// busyDetail is the details text while Homebrew works on a service, or ''.
+function busyDetail(s) {
+  if (s.installing) return `Installing with Homebrew. ${viewOutput}`;
+  if (s.upgrading) return `Upgrading with Homebrew. ${viewOutput}`;
+  if (s.installError) return `<span class="problem error">${esc(s.installError)}</span>`;
+  return '';
+}
+
+// updatesLine lists the updates of one page in one place. Each name upgrades.
+function updatesLine(list) {
+  const u = list.filter(s => s.update && !s.upgrading);
+  return u.length ? 'Updates: ' + u.map(s => `<button class="link" title="Upgrade from ${esc(s.version)} to ${esc(s.update)}" onclick="upgrade(this,'${s.id}')">${esc(shortName(s))} ${esc(s.update)}</button>`).join(', ') : '';
+}
+
+function serviceRow(s) {
+  const need = needed(s);
+  const used = s.usedBy || [];
+  let detail = busyDetail(s);
+  if (!detail && s.kind === 'php') detail = !used.length ? 'No sites use it'
+    : need ? `<span class="problem error">Stopped. ${esc(andList(used))} ${plural(used.length, 'needs', 'need')} it.</span>`
+    : 'Used by ' + esc(used.join(', '));
+  if (!detail) detail = esc(tilde(s.detail || '')) + (s.admin && !s.running ? '. Needs your password.' : '');
+  const actions = !s.installed ? (s.installError ? `<button class="btn small" onclick="installNew('${s.id}')">Try again</button>` : '')
+    : s.running ? `<button class="btn small" onclick="svc(this,'${s.id}','restart')">Restart</button><button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
+    : `<button class="btn small${need ? ' primary' : ''}" onclick="svc(this,'${s.id}','start')">Start</button>`;
+  return srow({dot: s.running ? 'ok' : need ? 'error' : '', name: esc(shortName(s)), ver: esc(s.version || ''), detail,
+    actions: actions + (s.installed ? moreBtn(s, 'serviceMenu') : '')});
+}
+
 function renderServices() {
   const chosen = $('#ver-php') && $('#ver-php').value;
   const list = state.services.filter(s => !isExtra(s));
-  const cards = list.map(s => `
-    <div class="card">
-      <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(s.name)}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
-      <div class="meta">${esc(s.running ? 'Running' : s.installed ? 'Stopped' : 'Not installed')}${s.admin ? ', needs your password' : ''}<br>${esc(s.detail)}${s.usedBy && s.usedBy.length ? `<br>Used by ${esc(s.usedBy.join(', '))}` : ''}${updateLine(s)}</div>
-      <div class="actions">
-        ${s.running
-          ? `<button class="btn small" onclick="svc(this,'${s.id}','restart')">Restart</button><button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
-          : !s.installed && s.formula ? extraActions(s)
-          : `<button class="btn small primary" ${s.installed ? '' : 'disabled'} onclick="svc(this,'${s.id}','start')">Start</button>`}
-        <span class="spacer"></span>
-        <button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="serviceMenu(event, '${s.id}')">${ICONS.more}</button>
-      </div>
-    </div>`);
-  // The "Add a PHP version" card comes after the last PHP card.
-  const lastPHP = list.map(s => s.kind).lastIndexOf('php');
-  const add = addPHPCard();
-  if (add) cards.splice(lastPHP + 1, 0, add);
-  $('#services').innerHTML = cards.join('');
+  const rows = list.filter(s => s.installed || s.installing || s.installError).map(serviceRow);
+  if (state.phpInstalling) rows.push(srow({name: `PHP ${esc(state.phpInstalling)}`, detail: `Installing with Homebrew. This can take some minutes. ${viewOutput}`}));
+  const missing = list.filter(s => !s.installed && !s.installing && !s.installError && s.formula);
+  $('#servicesUpdates').innerHTML = updatesLine(list);
+  $('#services').innerHTML = `<div class="list">${rows.join('')}</div>` + installLine([phpPicker(), ...missing.map(installChip)]);
   if (chosen && $('#ver-php')) $('#ver-php').value = chosen;
 }
 
-function addPHPCard() {
+// installLine shows the services that are not installed, on one line.
+function installLine(parts) {
+  parts = parts.filter(Boolean);
+  return parts.length ? `<div class="install" role="group" aria-label="Install with Homebrew"><span class="muted">Install with Homebrew:</span>${parts.join('')}</div>` : '';
+}
+
+function installChip(s) {
+  return `<button class="chip" aria-label="Install ${esc(cardName(s))}" onclick="installNew('${s.id}')">${esc(cardName(s))}</button>`;
+}
+
+// installNew asks before Homebrew installs a service. It asks for the version when there are more.
+function installNew(id) {
+  const s = state.services.find(x => x.id === id);
+  if ((s.choices || []).length > 1) return installVersion(id);
+  if (confirm(`Install ${s.name} with Homebrew? This can take some minutes.`)) install(null, id);
+}
+
+function phpPicker() {
   const choices = state.phpChoices || [];
-  if (state.phpInstalling) return `
-    <div class="card">
-      <div class="top"><span class="dot"></span><span class="name">PHP ${esc(state.phpInstalling)}</span></div>
-      <div class="meta">Installing with Homebrew. This can take some minutes.</div>
-      <div class="actions"><button class="btn small" onclick="go('logs','brew')">View output</button></div>
-    </div>`;
-  if (!choices.length) return '';
+  if (state.phpInstalling || !choices.length) return '';
   const label = c => c.key + (c.preview ? ' (preview)' : c.deprecated ? ' (end of life)' : '');
   // Choose the newest final release, not a preview.
   const pick = (choices.find(c => !c.preview) || choices[0]).key;
-  return `
-    <div class="card">
-      <div class="top"><span class="dot"></span><span class="name">Add a PHP version</span></div>
-      <div class="meta">Each version runs on its own socket, so sites can use different versions.</div>
-      <div class="actions"><select id="ver-php" aria-label="PHP version">${choices.map(c => `<option value="${esc(c.key)}" ${c.key === pick ? 'selected' : ''}>${esc(label(c))}</option>`).join('')}</select>
-        <button class="btn small primary" onclick="install(this, 'php-' + $('#ver-php').value)">Install</button></div>
-    </div>`;
+  return `<span style="display:inline-flex;gap:6px;align-items:center">PHP <select id="ver-php" aria-label="PHP version">${choices.map(c => `<option value="${esc(c.key)}" ${c.key === pick ? 'selected' : ''}>${esc(label(c))}</option>`).join('')}</select>
+    <button class="btn small" onclick="install(this, 'php-' + $('#ver-php').value)">Install</button></span>`;
 }
 
 function serviceMenu(ev, id) {
@@ -727,7 +867,7 @@ function versionOptions(s) {
 
 async function installVersion(id) {
   const s = state.services.find(x => x.id === id);
-  const v = await ask(`Install another ${s.familyName} version`, [{name: 'id', label: 'Version', options: s.choices.map((c, i) => ({value: c.id, label: versionLabel(s, c, i)}))}],
+  const v = await ask(s.installed ? `Install another ${s.familyName} version` : `Install ${s.familyName}`, [{name: 'id', label: 'Version', options: s.choices.map((c, i) => ({value: c.id, label: versionLabel(s, c, i)}))}],
     {note: 'Each version has its own port and data folder, so versions can run at the same time.', submit: 'Install'});
   if (v) install(null, v.id);
 }
@@ -758,19 +898,32 @@ function extraMetaInstalled(s) {
   return html + updateLine(s);
 }
 
+function dbDetail(s) {
+  const b = busyDetail(s);
+  if (b) return b;
+  let html = esc(tilde(s.detail || '')).replace(', data ', '<br>Data: ');
+  if (s.dataSource === 'flyenv') html += ' <span class="badge">FlyEnv data</span>';
+  if (isDB(s) && s.running) {
+    const c = dbCache[s.id];
+    if (!c || c.loading && !c.list) html += '<br>Databases: loading…';
+    else if (c.error) html += `<br><span class="problem error">${esc(c.error)}</span>`;
+    else html += '<br>Databases: ' + (c.list.length ? esc(c.list.join(', ')) : 'none yet');
+  }
+  return html;
+}
+
 function renderDatabases() {
   const list = state.services.filter(x => x.kind === 'database');
   for (const s of list) if (isDB(s) && s.running && currentView() === 'databases') loadDatabases(s.id);
-  // Keep the chosen versions when the cards draw again.
-  const chosen = [...document.querySelectorAll('#databases select[id^="ver-"]')].map(x => [x.id, x.value]);
-  $('#databases').innerHTML = list.map(s => `
-    <div class="card">
-      <div class="top"><span class="dot ${s.running ? 'ok' : ''}"></span><span class="name">${esc(cardName(s))}</span>${s.version ? `<span class="badge">${esc(s.version)}</span>` : ''}</div>
-      <div class="meta">${extraMeta(s)}</div>
-      <div class="actions" style="flex-wrap:wrap">${extraActions(s)}<span class="spacer"></span>
-        ${s.installed ? `<button class="icon" title="More" aria-label="More for ${esc(s.name)}" onclick="extraMenu(event,'${s.id}')">${ICONS.more}</button>` : ''}</div>
-    </div>`).join('');
-  for (const [id, value] of chosen) { const x = document.getElementById(id); if (x) x.value = value; }
+  const rows = list.filter(s => s.installed || s.installing || s.installError).map(s => srow({
+    dot: s.running ? 'ok' : '', name: esc(s.installed ? s.name : cardName(s)), ver: esc(s.version || ''), detail: dbDetail(s),
+    actions: (!s.installed ? (s.installError ? `<button class="btn small" onclick="installNew('${s.id}')">Try again</button>` : '')
+      : s.running ? `<button class="btn small" onclick="svc(this,'${s.id}','stop')">Stop</button>`
+      : `<button class="btn small" onclick="svc(this,'${s.id}','start')">Start</button>`) + (s.installed ? moreBtn(s, 'extraMenu') : ''),
+  }));
+  const missing = list.filter(s => !s.installed && !s.installing && !s.installError);
+  $('#databasesUpdates').innerHTML = updatesLine(list);
+  $('#databases').innerHTML = (rows.length ? `<div class="list">${rows.join('')}</div>` : '<div class="list empty">No databases yet. Install one below.</div>') + installLine(missing.map(installChip));
 }
 
 let mailEnv = null;
@@ -789,7 +942,9 @@ function renderMail() {
 
 function extraMenu(ev, id) {
   const s = state.services.find(x => x.id === id);
-  const items = [];
+  const items = (s.links || []).map(l => [l.label, () => window.open(l.url, '_blank')]);
+  if (isDB(s) && s.running) items.push(['New database', () => newDatabase(id)]);
+  items.push(['Copy .env lines', () => copyEnv(null, id)], null);
   if (isDB(s)) {
     items.push(['New user', () => newDBUser(id)]);
     items.push(['Set root password', () => rootPassword(id)]);
@@ -971,7 +1126,7 @@ function renderFTP() {
   if (!state.ftpUsers.length) { $('#ftp').innerHTML = `<div class="list empty">No FTP users.</div>`; return; }
   $('#ftp').innerHTML = `<div class="list">${state.ftpUsers.map(u => `
     <div class="item"><div class="item-main">
-      <div class="item-title"><div class="name">${esc(u.user)}</div><div class="sub">${esc(u.dir)}</div></div>
+      <div class="item-title"><div class="name">${esc(u.user)}</div><div class="sub" title="${esc(u.dir)}">${esc(tilde(u.dir))}</div></div>
       <button class="icon" title="Show folder in Finder" aria-label="Show folder" onclick="openPath('finder', ${esc(JSON.stringify(u.dir))})">${ICONS.folder}</button>
       <button class="icon" title="More" aria-label="More for ${esc(u.user)}" onclick="ftpMenu(event, '${esc(u.user)}')">${ICONS.more}</button>
     </div></div>`).join('')}</div>`;
@@ -1189,7 +1344,7 @@ const actions = {
   'start-all': () => api('POST', '/api/start-all').then(() => toast('All services started')),
   'stop-all': () => api('POST', '/api/stop-all').then(() => toast('All services stopped')),
   'hosts': () => api('POST', '/api/hosts/sync').then(() => toast('/etc/hosts is up to date')),
-  'updates': () => api('POST', '/api/updates/check').then(r => toast(r.updates ? `${r.updates === 1 ? '1 service has' : r.updates + ' services have'} an update. Its card shows an Upgrade button.` : 'All services are up to date.')),
+  'updates': () => api('POST', '/api/updates/check').then(r => toast(r.updates ? `${r.updates === 1 ? '1 service has' : r.updates + ' services have'} an update. The Services and Databases pages list it.` : 'All services are up to date.')),
   'trust': () => api('POST', '/api/trust').then(() => toast('Certificate trusted. Restart your browser.')),
   'import': () => {
     if (!confirm('Import Caddy sites and FTP users from FlyEnv? Benchtop skips items that already exist.')) return;

@@ -288,8 +288,11 @@ func (s *server) state() map[string]any {
 	}
 	editors, terminals := core.InstalledApps()
 	_, loginErr := os.Stat(core.LoginPlistPath())
+	// userHome lets the page show paths as ~/Work/... instead of the full path.
+	userHome, _ := os.UserHomeDir()
 	return map[string]any{
 		"home":     s.m.Home,
+		"userHome": userHome,
 		"services": services,
 		"sites":    sites,
 		"php":      core.DiscoverPHP(),
